@@ -1,4 +1,6 @@
-const MCP_BASE = "/mcp";
+const MCP_BASE = "/api";
+const RAG_BASE = "/mcp";
+
 
 async function j(res: Response): Promise<any> {
   if (!res.ok) {
@@ -54,7 +56,7 @@ export async function listDocuments(): Promise<DocumentItem[]> {
 
 export async function uploadDocument(text: string, source?: string) {
   return j(
-    await fetch(`${MCP_BASE}/ingest`, {
+    await fetch(`${RAG_BASE}/ingest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, source }),
@@ -64,7 +66,7 @@ export async function uploadDocument(text: string, source?: string) {
 
 export async function queryDocuments(query: string, limit = 5) {
   return j(
-    await fetch(`${MCP_BASE}/query`, {
+    await fetch(`${RAG_BASE}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, limit }),
