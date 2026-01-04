@@ -1,0 +1,52 @@
+const API_BASE =
+  import.meta.env.VITE_SPEC_KIT_API || window.location.origin;
+
+/* =======================
+   Generic API helper
+======================= */
+async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { Accept: "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
+/* =======================
+   Types expected by App.tsx
+======================= */
+export interface Health {
+  status: string;
+  ollama: string;
+  mcp: string;
+  forgejo: string;
+  database: {
+    status: string;
+    documents: number;
+  };
+  models: Record<string, any>;
+}
+
+/* =======================
+   API calls
+======================= */
+export const getHealth = () => api<Health>("/health");
+
+export const getModelsStatus = () =>
+  api("/models/status");
+
+export const listDocuments = () =>
+  api("/documents/list");
+
+export const getDocumentStats = () =>
+  api("/documents/stats");
+
+export const runPipeline = (payload: any) =>
+  api("/pipeline/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });

@@ -1,0 +1,199 @@
+\
+/**
+ * Reactor UI API contract adapter
+ * - Keeps the same exports/types App.tsx expects
+ * - Routes calls through MCP dashboard proxy: /mcp/api/proxy?path=api/...
+ */
+
+const MCP_BASE = '/mcp/api/proxy?path=api';
+
+async function mcp<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${MCP_BASE}${path}`, {
+    headers: {
+      Accept: 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${t}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+/* ===== Types App.tsx expects ===== */
+export interface Health {
+  status: string;
+  version: string;
+  ollama: string;
+  mcp: string;
+  forgejo: string;
+  database: {
+    status: string;
+    documents: number;
+  };
+  models: Record<string, any>;
+}
+
+export interface ModelsStatus {
+  status: string;
+  available_models: string[];
+  configured_models: string[];
+  missing_models: string[];
+}
+
+export interface DocumentStats {
+  total_documents: number;
+  total_chunks: number;
+}
+
+export interface DocumentItem {
+  id: number;
+  filename: string;
+  uploaded_at: string;
+  metadata: Record<string, any>;
+}
+
+export interface TaskItem {
+  id: number;
+  name: string;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface PipelineResponse {
+  code?: string;
+  generated_code?: string;
+  output_code?: string;
+  result?: any;
+  status?: string;
+  run_id?: string;
+  output?: any;
+  [key: string]: any;
+}
+
+/* ===== MCP native shapes ===== */
+type McpRun = {
+  run_id: string;
+  created: number;
+  input: any;
+  output: any;
+};
+
+/* ===== Normalizers (so UI stops screaming) ===== */
+function toIso(ts: number): string {
+  // backend "created" looks like unix seconds float
+  const ms = ts > 10_000_000_000 ? ts : ts * 1000;
+  return new Date(ms).toISOString();
+}
+
+function runToDocumentItem(run: McpRun, idx: number): DocumentItem {
+  const id = Number.isFinite(run.created) ? Math.floor(run.created) : (idx + 1);
+  return {
+    id,
+    filename: run.run_id,
+    uploaded_at: toIso(run.created || Date.now()/1000),
+    metadata: { kind: "run", input: run.input, output: run.output },
+  };
+}
+
+function runToTaskItem(run: McpRun, idx: number): TaskItem {
+  const id = Number.isFinite(run.created) ? Math.floor(run.created) : (idx + 1);
+  const status = run?.output?.status || run?.output?.output?.status || "completed";
+  return {
+    id,
+    name: run?.input?.task || run.run_id,
+    status,
+    created_at: toIso(run.created || Date.now()/1000),
+    updated_at: toIso(run.created || Date.now()/1000),
+  };
+}
+
+/* ===== Exports (match App.tsx imports) ===== */
+export const getHealth = async (): Promise<Health> => {
+  // MCP returns: {"status":"ok"} right now
+  const raw = await mcp<any>('/health');
+
+  return {
+    status: raw?.status ?? "ok",
+    version: raw?.version ?? "unknown",
+    ollama: raw?.ollama ?? "unknown",
+    mcp: raw?.mcp ?? "online",
+    forgejo: raw?.forgejo ?? "unknown",
+    database: raw?.database ?? { status: "unknown", documents: 0 },
+    models: raw?.models ?? {},
+  };
+};
+
+export const getModelsStatus = async (): Promise<ModelsStatus> => {
+  // If MCP doesn't expose this yet, return safe defaults for UI.
+  try {
+    const raw = await mcp<any>('/models/status');
+    return {
+      status: raw?.status ?? "unknown",
+      available_models: raw?.available_models ?? [],
+      configured_models: raw?.configured_models ?? [],
+      missing_models: raw?.missing_models ?? [],
+    };
+  } catch {
+    return { status: "unknown", available_models: [], configured_models: [], missing_models: [] };
+  }
+};
+
+export const getDocumentStats = async (): Promise<DocumentStats> => {
+  // Map runs -> "documents"
+  const raw = await mcp<{ runs?: McpRun[] }>('/runs');
+  const runs = raw?.runs ?? [];
+  return { total_documents: runs.length, total_chunks: 0 };
+};
+
+export const listDocuments = async (): Promise<DocumentItem[]> => {
+  const raw = await mcp<{ runs?: McpRun[] }>('/runs');
+  const runs = raw?.runs ?? [];
+  return runs.map(runToDocumentItem);
+};
+
+export const queryDocuments = async (query: string, limit = 5): Promise<DocumentItem[]> => {
+  const all = await listDocuments();
+  const q = (query || "").toLowerCase();
+  const filtered = q ? all.filter(d => d.filename.toLowerCase().includes(q)) : all;
+  return filtered.slice(0, limit);
+};
+
+export const uploadDocument = async (file: File, metadata: Record<string, any>) => {
+  // Map "documents/upload" -> MCP RAG upload
+  const form = new FormData();
+  form.append("files", file); // MCP expects "files"
+  // metadata currently not enforced by MCP; keep it for future compatibility
+  form.append("metadata", JSON.stringify(metadata || {}));
+
+  // IMPORTANT: must go through proxy so it can add X-API-Key server-side
+  const res = await fetch(`/mcp/api/proxy?path=api/rag/upload`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Upload failed: ${res.status} ${t}`);
+  }
+
+  return res.json();
+};
+
+export const listTasks = async (): Promise<TaskItem[]> => {
+  const raw = await mcp<{ runs?: McpRun[] }>('/runs');
+  const runs = raw?.runs ?? [];
+  return runs.map(runToTaskItem);
+};
+
+export const runPipeline = (payload: any): Promise<PipelineResponse> =>
+  mcp<PipelineResponse>('/pipeline/run', {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });

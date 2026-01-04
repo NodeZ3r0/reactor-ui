@@ -1,0 +1,19 @@
+services:
+  reactor-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=https://reactor.wopr.systems
+    container_name: reactor_ui
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    environment:
+      - VITE_API_BASE_URL=https://reactor.wopr.systems
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

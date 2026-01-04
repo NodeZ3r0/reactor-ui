@@ -1,0 +1,46 @@
+const MCP_BASE = '/mcp/api/proxy?path=api';
+
+async function mcp<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${MCP_BASE}${path}`, {
+    headers: {
+      Accept: 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`${res.status}: ${t}`);
+  }
+  return res.json();
+}
+
+/* ===== Health ===== */
+export interface Health { status: string; }
+export const getHealth = () => mcp<Health>('/health');
+
+/* ===== Runs ===== */
+export interface RunItem {
+  run_id: string;
+  created: number;
+  input: any;
+  output: any;
+}
+
+export const listDocuments = async (): Promise<RunItem[]> => {
+  const res = await mcp<{ runs: RunItem[] }>('/runs');
+  return res.runs || [];
+};
+
+export const listTasks = async (): Promise<RunItem[]> => {
+  const res = await mcp<{ runs: RunItem[] }>('/runs');
+  return res.runs || [];
+};
+
+/* ===== Pipeline ===== */
+export const runPipeline = (payload: any) =>
+  mcp('/pipeline/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
