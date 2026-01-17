@@ -39,7 +39,7 @@ export type DocumentItem = {
 };
 
 export async function getHealth(): Promise<Health> {
-  return normalizeHealth(await j(await fetch(`/health`)));
+  return j(await fetch(`/health`));
 }
 
 export async function getModelsStatus(): Promise<ModelsStatus> {
@@ -82,25 +82,4 @@ export async function runPipeline(payload: any): Promise<any> {
       body: JSON.stringify(payload),
     })
   );
-}
-
-
-function normalizeHealth(h:any){
-  if(!h) return h;
-  return {
-    status: h.status,
-    ollama: h.ollama,
-    forgejo: h.forgejo,
-    mcp: h.mcp,
-    database: typeof h.database === "string"
-      ? { status: h.database, documents: 0 }
-      : h.database
-  }
-}
-
-function normalizeModels(m:any){
-  if(!m) return m;
-  return {
-    configured_models: m.models || []
-  }
 }

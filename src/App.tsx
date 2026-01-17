@@ -13,10 +13,8 @@ import {
   type ModelsStatus,
   type TaskItem,
 } from "./api";
-
 type View = "dashboard" | "pipeline" | "rag";
 type RepoProvider = "forgejo" | "github" | "gitlab" | "codeberg" | "custom";
-
 type ReactorProject = {
   id: string;
   name: string;
@@ -26,18 +24,14 @@ type ReactorProject = {
   createdAt: string;
   lastRunAt?: string;
 };
-
 const LS_PROJECTS = "reactor.projects.v1";
 const LS_ACTIVE_PROJECT = "reactor.activeProjectId.v1";
-
 function nowIso() {
   return new Date().toISOString();
 }
-
 function uid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
-
 function safeJsonParse<T>(raw: string | null, fallback: T): T {
   try {
     if (!raw) return fallback;
@@ -46,7 +40,6 @@ function safeJsonParse<T>(raw: string | null, fallback: T): T {
     return fallback;
   }
 }
-
 function normalizeRepoUrl(provider: RepoProvider, repo: string, repoUrl: string) {
   const r = (repo || "").trim();
   const u = (repoUrl || "").trim();
@@ -68,12 +61,10 @@ function normalizeRepoUrl(provider: RepoProvider, repo: string, repoUrl: string)
   }
   return { repo: r, repoUrl: u };
 }
-
 function repoDisplay(p: ReactorProject) {
   if (p.provider === "forgejo") return p.repo || "(repo not set)";
   return p.repoUrl || p.repo || "(repo not set)";
 }
-
 function repoLink(p: ReactorProject) {
   if (p.provider === "forgejo") {
     const FORGEJO_PUBLIC_BASE = "https://vault.wopr.systems/";
@@ -82,7 +73,6 @@ function repoLink(p: ReactorProject) {
   }
   return (p.repoUrl || "").trim();
 }
-
 function formatAgo(iso?: string) {
   if (!iso) return "—";
   const t = Date.parse(iso);
@@ -97,11 +87,9 @@ function formatAgo(iso?: string) {
   const d = Math.floor(h / 24);
   return `${d}d ago`;
 }
-
 function pillClass(ok: boolean | null) {
   return ok === null ? "" : ok ? "ok" : "bad";
 }
-
 function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" }) {
   const { variant = "primary", className, ...rest } = props;
   return (
@@ -115,17 +103,14 @@ function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant
     />
   );
 }
-
 function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
   return <input {...rest} className={["input", className || ""].join(" ")} />;
 }
-
 function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   const { className, ...rest } = props;
   return <select {...rest} className={["select", className || ""].join(" ")} />;
 }
-
 function Panel(props: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="panel">
@@ -137,15 +122,12 @@ function Panel(props: { title: string; children: React.ReactNode; right?: React.
     </div>
   );
 }
-
 function Divider() {
   return <div className="divider" />;
 }
-
 // ----------------------------------------------------------------------------
 // VIEWS
 // ----------------------------------------------------------------------------
-
 function DashboardView(props: {
   health: Health | null;
   modelsStatus: ModelsStatus | null;
@@ -243,7 +225,6 @@ function DashboardView(props: {
     </div>
   );
 }
-
 function RagView(props: {
   activeProject: ReactorProject | null;
 }) {
@@ -253,11 +234,9 @@ function RagView(props: {
   const [qLoading, setQLoading] = useState(false);
   const [qResult, setQResult] = useState<any>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-
   // --- CHECKPOINT 1: Upload State & Duplicate Handling ---
   const [uploading, setUploading] = useState(false);
   const [duplicateFile, setDuplicateFile] = useState<{file: File, metadata: any} | null>(null);
-
   async function refreshDocs() {
     setDocsLoading(true);
     try {
@@ -267,18 +246,18 @@ function RagView(props: {
       setDocsLoading(false);
     }
   }
-
   useEffect(() => {
     refreshDocs();
   }, []);
-
   async function performUpload(file: File, metadata: any, overwrite: boolean) {
     setUploading(true);
     try {
-      
       // RAG upload via JSON ingest (no FormData)
       const fileText = await file.text();
-      const res = await fetch('/mcp/api/proxy?path=api/rag/ingest', {
+
+      // FIX: Directly hit the MCP backend route that Caddy proxies (/mcp/*)
+      // Old: /mcp/api/proxy?path=api/rag/ingest  (doesn't exist on backend)
+      const res = await fetch('/mcp/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -286,29 +265,24 @@ function RagView(props: {
           source: file.name,
         }),
       });
-    
 
       if (res.status === 409) {
         setDuplicateFile({ file, metadata });
         setUploading(false);
         return;
       }
-
       if (!res.ok) {
         throw new Error(`Upload failed: ${res.status} ${res.statusText}`);
       }
-
       if (fileRef.current) fileRef.current.value = "";
       setDuplicateFile(null);
-      await refreshDocs(); 
-
+      await refreshDocs();
     } catch (e: any) {
       alert("Error uploading: " + e.message);
     } finally {
       setUploading(false);
     }
   }
-
   async function onUpload() {
     const f = fileRef.current?.files?.[0];
     if (!f) return;
@@ -324,7 +298,6 @@ function RagView(props: {
     };
     await performUpload(f, metadata, false);
   }
-
   async function onQuery() {
     const query = q.trim();
     if (!query) return;
@@ -337,7 +310,6 @@ function RagView(props: {
       setQLoading(false);
     }
   }
-
   return (
     <div className="main-panels single">
       <Panel
@@ -403,7 +375,6 @@ function RagView(props: {
             )}
           </div>
         </div>
-
         {/* --- CHECKPOINT 1: Duplicate Overwrite Modal --- */}
         {duplicateFile && (
           <div className="modal-overlay">
@@ -422,12 +393,10 @@ function RagView(props: {
             </div>
           </div>
         )}
-
       </Panel>
     </div>
   );
 }
-
 function PipelineView(props: {
   projects: ReactorProject[];
   activeProjectId: string | null;
@@ -441,11 +410,9 @@ function PipelineView(props: {
   );
   const [goal, setGoal] = useState("");
   const [phaseLog, setPhaseLog] = useState<string>("");
-  
   const [ragUsed, setRagUsed] = useState<boolean | null>(null);
   const [ragSources, setRagSources] = useState<string[]>([]);
   const [ragContext, setRagContext] = useState<string>("");
-
   const [running, setRunning] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -455,7 +422,6 @@ function PipelineView(props: {
   const [code, setCode] = useState<string>(
     `// Reactor Editor\n// Use pipeline run output and refine here.\n`
   );
-
   function openNewProject() {
     setNewName("");
     setNewProvider("forgejo");
@@ -463,7 +429,6 @@ function PipelineView(props: {
     setNewRepoUrl("");
     setNewOpen(true);
   }
-
   function createProject() {
     const name = newName.trim();
     if (!name) return;
@@ -480,7 +445,6 @@ function PipelineView(props: {
     props.setActiveProjectId(p.id);
     setNewOpen(false);
   }
-
   async function onRunPipeline() {
     const g = goal.trim();
     if (!g) return;
@@ -497,24 +461,19 @@ function PipelineView(props: {
         project: activeProject.name,
         provider: activeProject.provider,
       };
-      
       if (activeProject.provider === "forgejo") {
         payload.repo = norm.repo;
       } else {
         payload.repo_url = norm.repoUrl || "";
         payload.repo = norm.repo || "";
       }
-      
       const res = await runPipeline(payload);
-
       setRagUsed(res.rag_used ?? false);
       setRagSources(res.rag_sources ?? []);
       setRagContext(res.rag_context ?? "");
-
       props.updateProject(activeProject.id, { lastRunAt: nowIso() });
       const out = typeof res === "string" ? res : JSON.stringify(res, null, 2);
       setPhaseLog(out);
-      
       if (res && typeof res === "object") {
         const codeCandidate =
           (res.code as string) ||
@@ -533,7 +492,6 @@ function PipelineView(props: {
       setRunning(false);
     }
   }
-
   const recentProjects = useMemo(() => {
     return [...props.projects].sort((a, b) => {
       const ta = Date.parse(a.lastRunAt || a.createdAt);
@@ -541,10 +499,8 @@ function PipelineView(props: {
       return tb - ta;
     });
   }, [props.projects]);
-
   const link = activeProject ? repoLink(activeProject) : "";
   const nonForgejo = activeProject && activeProject.provider !== "forgejo";
-
   return (
     <div className="main-panels single">
       <Panel
@@ -701,7 +657,6 @@ function PipelineView(props: {
     </div>
   );
 }
-
 export default function App() {
   const [activeView, setActiveView] = useState<View>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -717,19 +672,16 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(() =>
     localStorage.getItem(LS_ACTIVE_PROJECT) || null
   );
-
   useEffect(() => {
     localStorage.setItem(LS_PROJECTS, JSON.stringify(projects));
   }, [projects]);
   useEffect(() => {
     if (activeProjectId) localStorage.setItem(LS_ACTIVE_PROJECT, activeProjectId);
   }, [activeProjectId]);
-
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId) || null,
     [projects, activeProjectId]
   );
-
   function upsertProject(p: ReactorProject) {
     setProjects((prev) => {
       const i = prev.findIndex((x) => x.id === p.id);
@@ -739,13 +691,11 @@ export default function App() {
       return copy;
     });
   }
-
   function updateProject(id: string, patch: Partial<ReactorProject>) {
     setProjects((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
     );
   }
-
   async function refreshHealth() {
     setHealthLoading(true);
     try {
@@ -770,13 +720,11 @@ export default function App() {
       setTasksLoading(false);
     }
   }
-
   useEffect(() => {
     refreshHealth();
     refreshModels();
     refreshTasks();
   }, []);
-
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setSidebarOpen(false);
@@ -799,10 +747,8 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
   const ollamaOk = health?.ollama === "online" ? true : health ? false : null;
   const dbOk = health?.database?.status === "online" ? true : health ? false : null;
-
   return (
     <div className="app-root">
       <button
@@ -901,7 +847,7 @@ export default function App() {
                 {healthLoading
                   ? "Checking health..."
                   : health
-                  ? `Ollama: ${health.ollama} · DB: ${health.database.status}`
+                  ? `Ollama: ${health.ollama} · DB: ${health.database?.status ?? "unknown"}`
                   : "No health data"}
               </span>
             </div>
