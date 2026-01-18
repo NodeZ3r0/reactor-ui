@@ -163,3 +163,8 @@ export async function textCompletion(request: CompletionRequest): Promise<any> {
 export async function getOllamaHealth(): Promise<{ status: string; base_url: string; models_available?: number; error?: string }> {
   return j(await fetch(`/api/ollama/health`));
 }
+
+export async function listAllDocuments() {
+  const result = await queryDocuments("", 1000);
+  return result.results || [];
+}
