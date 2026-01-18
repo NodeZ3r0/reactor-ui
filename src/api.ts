@@ -104,3 +104,62 @@ function normalizeModels(m:any){
     configured_models: m.models || []
   }
 }
+
+// Ollama LLM API
+export type OllamaModel = {
+  name: string;
+  size: number;
+  digest: string;
+  modified_at: string;
+};
+
+export type ChatMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
+
+export type ChatRequest = {
+  model: string;
+  messages: ChatMessage[];
+  stream?: boolean;
+  temperature?: number;
+  max_tokens?: number;
+  context?: string[];  // RAG context chunks
+};
+
+export type CompletionRequest = {
+  model: string;
+  prompt: string;
+  stream?: boolean;
+  temperature?: number;
+  max_tokens?: number;
+  context?: string[];  // RAG context chunks
+};
+
+export async function listOllamaModels(): Promise<{ models: OllamaModel[]; count: number }> {
+  return j(await fetch(`/api/ollama/models`));
+}
+
+export async function chatCompletion(request: ChatRequest): Promise<any> {
+  return j(
+    await fetch(`/api/ollama/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    })
+  );
+}
+
+export async function textCompletion(request: CompletionRequest): Promise<any> {
+  return j(
+    await fetch(`/api/ollama/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    })
+  );
+}
+
+export async function getOllamaHealth(): Promise<{ status: string; base_url: string; models_available?: number; error?: string }> {
+  return j(await fetch(`/api/ollama/health`));
+}
