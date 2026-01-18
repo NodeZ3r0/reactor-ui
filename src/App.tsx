@@ -13,6 +13,7 @@ import {
   type ModelsStatus,
   type TaskItem,
 } from "./api";
+import { SimpleRagView } from "./SimpleRagView";
 type View = "dashboard" | "pipeline" | "rag";
 type RepoProvider = "forgejo" | "github" | "gitlab" | "codeberg" | "custom";
 type ReactorProject = {
@@ -875,7 +876,7 @@ export default function App() {
             updateProject={updateProject}
           />
         )}
-        {activeView === "rag" && <RagView activeProject={activeProject} />}
+        {activeView === "rag" && <SimpleRagView />}
       </main>
     </div>
   );
