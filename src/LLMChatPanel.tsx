@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { chatCompletion, queryDocuments, listOllamaModels, type ChatMessage } from "./api";
 
-export function LLMChatPanel() {
+export function LLMChatPanel(props: { activeProject: { id: string; name: string } | null }) {
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("qwen2.5-coder:7b");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -30,7 +30,8 @@ export function LLMChatPanel() {
       let context: string[] = [];
       if (useRAG) {
         try {
-          const ragResults = await queryDocuments(input, 3);
+          const metadata = props.activeProject ? { project_id: props.activeProject.id } : undefined;
+          const ragResults = await queryDocuments(input, 3, metadata);
           context = ragResults.results?.map((r: any) => r.content) || [];
         } catch (e) {
           console.warn("RAG query failed:", e);

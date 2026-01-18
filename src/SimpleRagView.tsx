@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { uploadDocument, listAllDocuments } from "./api";
 import { LLMChatPanel } from "./LLMChatPanel";
 
-export function SimpleRagView() {
+export function SimpleRagView(props: { activeProject: { id: string; name: string } | null }) {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
   const [fileSelected, setFileSelected] = useState(false);
@@ -36,7 +36,8 @@ export function SimpleRagView() {
     try {
       const text = await file.text();
       setUploadStatus("Uploading to RAG...");
-      await uploadDocument(text, file.name);
+      const metadata = props.activeProject ? { project_id: props.activeProject.id, project_name: props.activeProject.name } : {};
+      await uploadDocument(text, file.name, metadata);
       setUploadStatus("✓ Document uploaded successfully!");
       if (fileRef.current) fileRef.current.value = "";
       setFileSelected(false);
@@ -148,7 +149,7 @@ export function SimpleRagView() {
         </div>
       </div>
 
-      <LLMChatPanel />
+      <LLMChatPanel activeProject={props.activeProject} />
     </div>
   );
 }

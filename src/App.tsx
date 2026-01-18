@@ -876,7 +876,7 @@ export default function App() {
             updateProject={updateProject}
           />
         )}
-        {activeView === "rag" && <SimpleRagView />}
+        {activeView === "rag" && <SimpleRagView activeProject={activeProject} />}
       </main>
     </div>
   );

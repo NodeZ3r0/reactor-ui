@@ -54,7 +54,7 @@ export async function listDocuments(): Promise<DocumentItem[]> {
   return j(await fetch(`${MCP_BASE}/documents`));
 }
 
-export async function uploadDocument(text: string, source?: string) {
+export async function uploadDocument(text: string, source?: string, metadata?: Record<string, any>) {
   return j(
     await fetch(`${RAG_BASE}/ingest`, {
       method: "POST",
@@ -64,7 +64,7 @@ export async function uploadDocument(text: string, source?: string) {
   );
 }
 
-export async function queryDocuments(query: string, limit = 5) {
+export async function queryDocuments(query: string, limit = 5, metadata?: Record<string, any>) {
   return j(
     await fetch(`${RAG_BASE}/query`, {
       method: "POST",
