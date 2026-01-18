@@ -67,7 +67,7 @@ export function LLMChatPanel() {
             <input type="checkbox" checked={useRAG} onChange={e => setUseRAG(e.target.checked)} />
             {" "}Use RAG
           </label>
-          <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="select">
+          <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="select" style={{backgroundColor: "#020b0d", color: "#c7ffe4"}}>
             {models.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
