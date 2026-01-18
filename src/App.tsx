@@ -823,7 +823,7 @@ export default function App() {
           </div>
         </div>
         <div className="sidebar-footer">
-          <div>NodeZ3r0 · Spec Kit</div>
+          <div>NodeZ3r0 · Reactor AI</div>
           <div style={{ fontSize: 10, opacity: 0.7 }}>
             API: {"/api"}
           </div>
