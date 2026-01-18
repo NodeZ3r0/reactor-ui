@@ -2,7 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { uploadDocument, listAllDocuments } from "./api";
 import { LLMChatPanel } from "./LLMChatPanel";
 
-export function SimpleRagView(props: { activeProject: { id: string; name: string } | null }) {
+export function SimpleRagView(props: { 
+  activeProject: { id: string; name: string } | null;
+  projects: Array<{ id: string; name: string; provider: string }>;
+  setActiveProjectId: (id: string) => void;
+  onNewProject: () => void;
+}) {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
   const [fileSelected, setFileSelected] = useState(false);
@@ -60,6 +65,28 @@ export function SimpleRagView(props: { activeProject: { id: string; name: string
           <div className="panel-title">Upload Documents to RAG</div>
         </div>
         <div className="panel-body">
+          <div style={{marginBottom: "20px", paddingBottom: "15px", borderBottom: "1px solid #333"}}>
+            <div style={{display: "flex", gap: "10px", alignItems: "center", marginBottom: "10px"}}>
+              <label style={{color: "#888", minWidth: "100px"}}>Active Project:</label>
+              <select 
+                value={props.activeProject?.id || ""} 
+                onChange={e => props.setActiveProjectId(e.target.value)}
+                className="select"
+                style={{flex: 1, backgroundColor: "#020b0d", color: "#c7ffe4"}}
+              >
+                <option value="" disabled>Select project...</option>
+                {props.projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} · {p.provider}</option>
+                ))}
+              </select>
+              <button onClick={props.onNewProject} className="btn btn-ghost">+ New Project</button>
+            </div>
+            {!props.activeProject && (
+              <div style={{color: "#ff9e4a", fontSize: "13px", marginTop: "8px"}}>
+                ⚠ Select a project to upload documents
+              </div>
+            )}
+          </div>
           <div style={{marginBottom: "15px"}}>
             <p style={{color: "#888", marginBottom: "10px"}}>
               Upload documents to the RAG vector database for AI-enhanced responses.
@@ -75,7 +102,7 @@ export function SimpleRagView(props: { activeProject: { id: string; name: string
               />
               <button 
                 onClick={handleUpload} 
-                disabled={uploading}
+                disabled={uploading || !props.activeProject}
                 className="btn btn-primary"
               >
                 {uploading ? "Uploading..." : "Upload"}

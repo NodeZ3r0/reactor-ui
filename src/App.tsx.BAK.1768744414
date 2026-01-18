@@ -13,7 +13,6 @@ import {
   type ModelsStatus,
   type TaskItem,
 } from "./api";
-import { SimpleRagView } from "./SimpleRagView";
 type View = "dashboard" | "pipeline" | "rag";
 type RepoProvider = "forgejo" | "github" | "gitlab" | "codeberg" | "custom";
 type ReactorProject = {
@@ -823,7 +822,7 @@ export default function App() {
           </div>
         </div>
         <div className="sidebar-footer">
-          <div>NodeZ3r0 · Reactor AI</div>
+          <div>NodeZ3r0 · Spec Kit</div>
           <div style={{ fontSize: 10, opacity: 0.7 }}>
             API: {"/api"}
           </div>
@@ -876,17 +875,7 @@ export default function App() {
             updateProject={updateProject}
           />
         )}
-        {activeView === "rag" && (
-          <SimpleRagView 
-            activeProject={activeProject}
-            projects={projects}
-            setActiveProjectId={setActiveProjectId}
-            onNewProject={() => {
-              setActiveView("pipeline");
-              // Pipeline view will handle project creation
-            }}
-          />
-        )}
+        {activeView === "rag" && <RagView activeProject={activeProject} />}
       </main>
     </div>
   );
