@@ -5,11 +5,15 @@ import { LLMChatPanel } from "./LLMChatPanel";
 export function SimpleRagView() {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [fileSelected, setFileSelected] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleUpload() {
     const file = fileRef.current?.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setUploadStatus("✗ Please select a file first");
+      return;
+    }
 
     setUploading(true);
     setUploadStatus("Reading file...");
@@ -19,6 +23,7 @@ export function SimpleRagView() {
       await uploadDocument(text, file.name);
       setUploadStatus("✓ Document uploaded successfully!");
       if (fileRef.current) fileRef.current.value = "";
+      setFileSelected(false);
       setTimeout(() => setUploadStatus(""), 3000);
     } catch (error: any) {
       setUploadStatus("✗ Upload failed: " + (error.message || String(error)));
@@ -41,14 +46,15 @@ export function SimpleRagView() {
             <div style={{display: "flex", gap: "10px", alignItems: "center"}}>
               <input 
                 type="file" 
-                ref={fileRef} 
+                ref={fileRef}
+                onChange={() => setFileSelected(!!fileRef.current?.files?.[0])}
                 accept=".txt,.md,.py,.js,.ts,.tsx,.json,.java,.go,.rs" 
                 disabled={uploading}
                 style={{flex: 1}}
               />
               <button 
                 onClick={handleUpload} 
-                disabled={uploading || !fileRef.current?.files?.[0]}
+                disabled={uploading}
                 className="btn btn-primary"
               >
                 {uploading ? "Uploading..." : "Upload"}
