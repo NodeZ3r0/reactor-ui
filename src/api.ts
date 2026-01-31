@@ -59,7 +59,7 @@ export async function uploadDocument(text: string, source?: string, metadata?: R
     await fetch(`${RAG_BASE}/ingest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, source }),
+      body: JSON.stringify({ text, source, metadata }),
     })
   );
 }
@@ -69,7 +69,7 @@ export async function queryDocuments(query: string, limit = 5, metadata?: Record
     await fetch(`${RAG_BASE}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, limit }),
+      body: JSON.stringify({ query, limit, metadata }),
     })
   );
 }
@@ -167,4 +167,91 @@ export async function getOllamaHealth(): Promise<{ status: string; base_url: str
 export async function listAllDocuments() {
   const result = await queryDocuments("", 1000);
   return result.results || [];
+}
+
+// Projects API
+export type Project = {
+  id: string;
+  name: string;
+  provider: string;
+};
+
+export async function listProjects(): Promise<{ projects: Project[] }> {
+  return j(await fetch(`${MCP_BASE}/projects`));
+}
+
+export async function createMirrorProject(name: string, cloneUrl: string, description?: string) {
+  return j(
+    await fetch(`${MCP_BASE}/projects/mirror`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, clone_url: cloneUrl, description }),
+    })
+  );
+}
+
+// Tool-calling chat API
+export type ToolChatRequest = {
+  model: string;
+  messages: ChatMessage[];
+  stream?: boolean;
+  temperature?: number;
+  max_tokens?: number;
+  context?: string[];
+  enable_tools?: boolean;
+};
+
+export type ToolLogEntry = {
+  tool: string;
+  args?: Record<string, any>;
+  status: string;
+  output_preview?: string;
+  proposal_id?: string;
+  error?: string;
+};
+
+export type ToolChatResponse = {
+  status?: string;
+  message?: { role: string; content: string };
+  pending_tool?: {
+    tool: string;
+    args: Record<string, any>;
+    proposal_id: string;
+    defcon_url: string;
+  };
+  conversation?: ChatMessage[];
+  tool_log?: ToolLogEntry[];
+  done?: boolean;
+};
+
+export async function chatWithTools(request: ToolChatRequest): Promise<ToolChatResponse> {
+  return j(
+    await fetch("/api/ollama/chat-with-tools", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    })
+  );
+}
+
+export async function chatContinue(request: {
+  model: string;
+  messages: ChatMessage[];
+  tool_name: string;
+  tool_args: Record<string, any>;
+  defcon_token?: string;
+  temperature?: number;
+  max_tokens?: number;
+}): Promise<ToolChatResponse> {
+  return j(
+    await fetch("/api/ollama/chat-continue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    })
+  );
+}
+
+export async function checkDefconProposal(proposalId: string): Promise<any> {
+  return j(await fetch("/api/defcon/proposals/" + proposalId));
 }

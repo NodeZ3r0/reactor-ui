@@ -17,6 +17,7 @@ export function SimpleRagView(props: {
   projects: Array<{ id: string; name: string; provider: string }>;
   setActiveProjectId: (id: string) => void;
   onNewProject: () => void;
+  upsertProject: (p: any) => void;
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -27,7 +28,13 @@ export function SimpleRagView(props: {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDocs, setSelectedDocs] = useState<Set<number>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
 
   useEffect(() => {
     // Filter documents based on search query
@@ -44,11 +51,38 @@ export function SimpleRagView(props: {
       setFilteredDocs(documents);
     }
   }, [searchQuery, documents]);
+  useEffect(() => { loadDocuments(); }, []);
 
   async function loadDocuments() {
     setLoading(true);
     try {
-      const docs = await listAllDocuments();
+      const rawDocs = await listAllDocuments();
+      // Deduplicate and clean: hide __DELETED__, junk, and migrated flat docs
+      const sourceSet = new Set<string>(rawDocs.map(d => d.source));
+      const docs = rawDocs.filter(doc => {
+        const src = doc.source || "";
+        // Hide docs marked as deleted
+        if (src.startsWith("__DELETED__/")) return false;
+        // Hide bare flat docs if a project-prefixed version exists
+        // e.g. hide "reactor-ai-spec.md" if "Reactor/reactor-ai-spec.md" exists
+        if (!src.includes("/")) {
+          for (const other of sourceSet) {
+            if (other.includes("/") && other.endsWith("/" + src)) {
+              return false;
+            }
+          }
+        }
+        // Hide subfolder docs if a deeper prefixed version exists
+        // e.g. hide "Build Plans/X.md" if "Brainjoos/Build Plans/X.md" exists
+        if (src.includes("/")) {
+          for (const other of sourceSet) {
+            if (other !== src && other.endsWith("/" + src)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
       setDocuments(docs);
       setFilteredDocs(docs);
       setShowDocs(true);
@@ -59,28 +93,53 @@ export function SimpleRagView(props: {
     }
   }
 
-  async function handleUpload() {
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setUploadStatus("✗ Please select a file first");
+  async function handleUpload(inputRef: React.RefObject<HTMLInputElement>) {
+    const files = inputRef.current?.files;
+    if (!files || files.length === 0) {
+      setUploadStatus("✗ Please select files or a folder");
       return;
     }
 
     setUploading(true);
-    setUploadStatus("Reading file...");
+    let successCount = 0;
+    let failCount = 0;
+
     try {
-      const text = await file.text();
-      setUploadStatus("Uploading to RAG...");
-      const metadata = props.activeProject ? {
-        project_id: props.activeProject.id,
-        project_name: props.activeProject.name,
-        filename: file.name
-      } : { filename: file.name };
-      await uploadDocument(text, file.name, metadata);
-      setUploadStatus("✓ Document uploaded successfully!");
-      if (fileRef.current) fileRef.current.value = "";
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadStatus(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+
+        try {
+          const text = await file.text();
+          const rawPath = (file as any).webkitRelativePath || file.name;
+          // Prefix with project name so docs nest under the project
+          const filepath = props.activeProject
+            ? (rawPath.toLowerCase().startsWith(props.activeProject.name.toLowerCase() + "/")
+                ? rawPath
+                : props.activeProject.name + "/" + rawPath)
+            : rawPath;
+          const metadata = props.activeProject ? {
+            project_id: props.activeProject.id,
+            project_name: props.activeProject.name,
+            filename: file.name,
+            filepath: filepath
+          } : {
+            filename: file.name,
+            filepath: filepath
+          };
+
+          await uploadDocument(text, filepath, metadata);
+          successCount++;
+        } catch (err: any) {
+          console.error(`Failed to upload ${file.name}:`, err);
+          failCount++;
+        }
+      }
+
+      setUploadStatus(`✓ Uploaded ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ""}`);
+      if (inputRef.current) inputRef.current.value = "";
       setFileSelected(false);
-      setTimeout(() => setUploadStatus(""), 3000);
+      setTimeout(() => setUploadStatus(""), 5000);
       if (showDocs) {
         loadDocuments();
       }
@@ -103,6 +162,61 @@ export function SimpleRagView(props: {
 
   const selectedDocsList = Array.from(selectedDocs).map(idx => filteredDocs[idx]).filter(Boolean);
 
+  // Merge Forgejo repos + RAG-derived projects, deduplicate, sort alphabetically
+  const allProjects = (() => {
+    const byName = new Map<string, {id: string; name: string; provider: string; description?: string}>();
+    // Add Forgejo repos
+    for (const p of props.projects) {
+      byName.set(p.name.toLowerCase(), {...p});
+    }
+    // Add projects derived from RAG document paths/metadata
+    for (const doc of documents) {
+      const projectName = doc.metadata?.project_name
+        || (doc.source?.includes("/") ? doc.source.split("/")[0] : null);
+      if (projectName && !byName.has(projectName.toLowerCase())) {
+        byName.set(projectName.toLowerCase(), {
+          id: projectName,
+          name: projectName,
+          provider: "rag",
+          description: `${documents.filter(d => (d.metadata?.project_name || (d.source?.includes("/") ? d.source.split("/")[0] : "")) === projectName).length} docs in RAG`,
+        });
+      }
+    }
+    return Array.from(byName.values()).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  })();
+
+  const filteredProjects = projectSearch.trim()
+    ? allProjects.filter(p =>
+        p.name.toLowerCase().includes(projectSearch.toLowerCase()) ||
+        p.provider.toLowerCase().includes(projectSearch.toLowerCase()) ||
+        (p as any).description?.toLowerCase().includes(projectSearch.toLowerCase())
+      )
+    : allProjects;
+
+  function openNewProjectModal() {
+    setNewProjectName("");
+    setNewProjectOpen(true);
+  }
+
+  function createNewProject() {
+    const name = newProjectName.trim();
+    if (!name) return;
+
+    // Create a simple Forgejo project
+    const project = {
+      id: name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      name: name,
+      provider: 'forgejo',
+      repo: name,
+      repoUrl: `https://vault.wopr.systems/${name}`,
+      createdAt: new Date().toISOString()
+    };
+
+    props.upsertProject(project);
+    props.setActiveProjectId(project.id);
+    setNewProjectOpen(false);
+  }
+
   return (
     <div className="main-panels">
       <div className="panel">
@@ -111,47 +225,145 @@ export function SimpleRagView(props: {
         </div>
         <div className="panel-body">
           <div style={{marginBottom: "20px", paddingBottom: "15px", borderBottom: "1px solid #333"}}>
-            <div style={{display: "flex", gap: "10px", alignItems: "center", marginBottom: "10px"}}>
-              <label style={{color: "#888", minWidth: "100px"}}>Active Project:</label>
-              <select
-                value={props.activeProject?.id || ""}
-                onChange={e => props.setActiveProjectId(e.target.value)}
-                className="select"
-                style={{flex: 1, backgroundColor: "#020b0d", color: "#c7ffe4"}}
-              >
-                <option value="" disabled>Select project...</option>
-                {props.projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} · {p.provider}</option>
-                ))}
-              </select>
-              <button onClick={props.onNewProject} className="btn btn-ghost">+ New Project</button>
+            {/* Breadcrumb bar */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "12px",
+              fontSize: "12px",
+              color: "#888"
+            }}>
+              <span>RAG</span>
+              <span style={{color: "#555"}}>{">"}</span>
+              {props.activeProject ? (
+                <span style={{color: "#4aff4a", fontWeight: "bold"}}>{props.activeProject.name}</span>
+              ) : (
+                <span style={{color: "#ff9e4a"}}>No project selected</span>
+              )}
+              <span style={{color: "#555"}}>{">"}</span>
+              <span>Upload</span>
             </div>
-            {!props.activeProject && (
-              <div style={{color: "#ff9e4a", fontSize: "13px", marginTop: "8px"}}>
-                ⚠ Select a project to upload documents
+
+            {/* Project selector */}
+            <div style={{display: "flex", gap: "10px", alignItems: "center", marginBottom: "10px"}}>
+              <button
+                onClick={() => setProjectPickerOpen(true)}
+                style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  backgroundColor: props.activeProject ? "#0a1a0a" : "#020b0d",
+                  color: props.activeProject ? "#4aff4a" : "#888",
+                  border: props.activeProject ? "1px solid #4aff4a44" : "1px solid #444",
+                  borderRadius: "4px",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <span>
+                  {props.activeProject
+                    ? props.activeProject.name
+                    : "Select project..."}
+                </span>
+                <span style={{fontSize: "11px", color: "#888"}}>Change</span>
+              </button>
+              <button onClick={openNewProjectModal} className="btn btn-ghost">+ New</button>
+            </div>
+
+            {/* Status indicator */}
+            {props.activeProject ? (
+              <div style={{
+                padding: "8px 12px",
+                backgroundColor: "#0a1a0a",
+                border: "1px solid #4aff4a33",
+                borderRadius: "4px",
+                color: "#4aff4a",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}>
+                <span style={{fontSize: "8px"}}>●</span>
+                Ready to upload to <strong>{props.activeProject.name}</strong>
+              </div>
+            ) : (
+              <div style={{
+                padding: "8px 12px",
+                backgroundColor: "#1a1200",
+                border: "1px solid #ff9e4a33",
+                borderRadius: "4px",
+                color: "#ff9e4a",
+                fontSize: "12px"
+              }}>
+                Select a project above before uploading documents
               </div>
             )}
           </div>
           <div style={{marginBottom: "15px"}}>
             <p style={{color: "#888", marginBottom: "10px"}}>
-              Upload documents to the RAG vector database for AI-enhanced responses.
+              Upload files or folders to the RAG vector database for AI-enhanced responses.
             </p>
-            <div style={{display: "flex", gap: "10px", alignItems: "center"}}>
-              <input
-                type="file"
-                ref={fileRef}
-                onChange={() => setFileSelected(!!fileRef.current?.files?.[0])}
-                accept=".txt,.md,.py,.js,.ts,.tsx,.json,.java,.go,.rs"
-                disabled={uploading}
-                style={{flex: 1}}
-              />
-              <button
-                onClick={handleUpload}
-                disabled={uploading || !props.activeProject}
-                className="btn btn-primary"
-              >
-                {uploading ? "Uploading..." : "Upload"}
-              </button>
+            <div style={{display: "flex", flexDirection: "column", gap: "10px"}}>
+              <div style={{display: "flex", gap: "10px", alignItems: "center"}}>
+                <input
+                  type="file"
+                  ref={fileRef}
+                  onChange={() => setFileSelected(!!fileRef.current?.files?.[0])}
+                  multiple
+                  disabled={uploading}
+                  style={{flex: 1}}
+                />
+                <button
+                  onClick={() => handleUpload(fileRef)}
+                  disabled={uploading || !props.activeProject}
+                  className="btn btn-primary"
+                >
+                  {uploading ? "Uploading..." : "Upload Files"}
+                </button>
+              </div>
+              <div style={{display: "flex", gap: "10px", alignItems: "center"}}>
+                <div style={{flex: 1, position: "relative"}}>
+                  <input
+                    type="file"
+                    ref={folderRef}
+                    onChange={() => setFileSelected(!!folderRef.current?.files?.[0])}
+                    {...({ webkitdirectory: "", directory: "" } as any)}
+                    disabled={uploading}
+                    style={{
+                      position: "absolute",
+                      opacity: 0,
+                      width: "100%",
+                      height: "100%",
+                      cursor: "pointer"
+                    }}
+                  />
+                  <div
+                    style={{
+                      padding: "6px 12px",
+                      border: "1px solid #444",
+                      borderRadius: "4px",
+                      backgroundColor: "#1a1a1a",
+                      color: folderRef.current?.files?.[0] ? "#c7ffe4" : "#888",
+                      cursor: "pointer",
+                      pointerEvents: "none"
+                    }}
+                  >
+                    {folderRef.current?.files?.[0]
+                      ? `${folderRef.current.files.length} file(s) selected`
+                      : "Choose folder..."}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleUpload(folderRef)}
+                  disabled={uploading || !props.activeProject}
+                  className="btn btn-primary"
+                >
+                  {uploading ? "Uploading..." : "Upload Folder"}
+                </button>
+              </div>
             </div>
             {uploadStatus && (
               <div style={{
@@ -205,45 +417,98 @@ export function SimpleRagView(props: {
                   {searchQuery ? "No documents match your search" : "No documents found"}
                 </div>
               ) : (
-                <div style={{display: "flex", flexDirection: "column", gap: "8px"}}>
-                  {filteredDocs.map((doc, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => toggleDocSelection(idx)}
-                      style={{
-                        padding: "10px",
-                        backgroundColor: selectedDocs.has(idx) ? "#1a3a1a" : "#0a0a0a",
-                        borderRadius: "3px",
-                        borderLeft: selectedDocs.has(idx) ? "3px solid #4aff4a" : "3px solid #4a9eff",
-                        cursor: "pointer",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <div style={{display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "4px"}}>
-                        <div style={{color: "#4a9eff", fontSize: "12px", fontWeight: "bold"}}>
-                          {doc.metadata?.filename || doc.source || "unknown"}
+                <div style={{display: "flex", flexDirection: "column", gap: "4px"}}>
+                  {(() => {
+                    // Group docs by project
+                    const groups: Record<string, {doc: RagDocument; idx: number}[]> = {};
+                    filteredDocs.forEach((doc, idx) => {
+                      const project = doc.metadata?.project_name
+                        || (doc.source?.includes("/") ? doc.source.split("/")[0] : null)
+                        || "Ungrouped";
+                      if (!groups[project]) groups[project] = [];
+                      groups[project].push({doc, idx});
+                    });
+                    // Sort: named projects first, Ungrouped last
+                    const sortedKeys = Object.keys(groups).sort((a, b) => {
+                      if (a === "Ungrouped") return 1;
+                      if (b === "Ungrouped") return -1;
+                      return a.localeCompare(b);
+                    });
+                    return sortedKeys.map(projectName => {
+                      const items = groups[projectName];
+                      const isCollapsed = collapsedGroups.has(projectName);
+                      const selectedCount = items.filter(i => selectedDocs.has(i.idx)).length;
+                      return (
+                        <div key={projectName} style={{marginBottom: "4px"}}>
+                          <div
+                            onClick={() => {
+                              const next = new Set(collapsedGroups);
+                              if (next.has(projectName)) next.delete(projectName);
+                              else next.add(projectName);
+                              setCollapsedGroups(next);
+                            }}
+                            style={{
+                              padding: "6px 10px",
+                              backgroundColor: "#111",
+                              borderRadius: "3px",
+                              cursor: "pointer",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              borderLeft: "3px solid #ff9e4a",
+                              userSelect: "none"
+                            }}
+                          >
+                            <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+                              <span style={{color: "#888", fontSize: "11px"}}>{isCollapsed ? "+" : "-"}</span>
+                              <span style={{color: "#ff9e4a", fontSize: "13px", fontWeight: "bold"}}>{projectName}</span>
+                              <span style={{color: "#666", fontSize: "11px"}}>({items.length} doc{items.length !== 1 ? "s" : ""})</span>
+                            </div>
+                            {selectedCount > 0 && (
+                              <span style={{color: "#4aff4a", fontSize: "11px"}}>{selectedCount} selected</span>
+                            )}
+                          </div>
+                          {!isCollapsed && (
+                            <div style={{display: "flex", flexDirection: "column", gap: "4px", marginLeft: "12px", marginTop: "4px"}}>
+                              {items.map(({doc, idx}) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => toggleDocSelection(idx)}
+                                  style={{
+                                    padding: "8px 10px",
+                                    backgroundColor: selectedDocs.has(idx) ? "#1a3a1a" : "#0a0a0a",
+                                    borderRadius: "3px",
+                                    borderLeft: selectedDocs.has(idx) ? "3px solid #4aff4a" : "3px solid #4a9eff",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s"
+                                  }}
+                                >
+                                  <div style={{display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "2px"}}>
+                                    <div style={{color: "#4a9eff", fontSize: "12px", fontWeight: "bold"}}>
+                                      {doc.metadata?.filename || doc.source?.split("/").pop() || doc.source || "unknown"}
+                                    </div>
+                                    {selectedDocs.has(idx) && (
+                                      <div style={{color: "#4aff4a", fontSize: "11px"}}>In Chat</div>
+                                    )}
+                                  </div>
+                                  <div style={{
+                                    color: "#ccc",
+                                    fontSize: "11px",
+                                    whiteSpace: "pre-wrap",
+                                    maxHeight: "40px",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis"
+                                  }}>
+                                    {doc.content?.substring(0, 150)}{doc.content?.length > 150 ? "..." : ""}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {selectedDocs.has(idx) && (
-                          <div style={{color: "#4aff4a", fontSize: "11px"}}>✓ In Chat</div>
-                        )}
-                      </div>
-                      {doc.metadata?.project_name && (
-                        <div style={{color: "#ff9e4a", fontSize: "11px", marginBottom: "4px"}}>
-                          Project: {doc.metadata.project_name}
-                        </div>
-                      )}
-                      <div style={{
-                        color: "#ccc",
-                        fontSize: "11px",
-                        whiteSpace: "pre-wrap",
-                        maxHeight: "60px",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis"
-                      }}>
-                        {doc.content?.substring(0, 200)}{doc.content?.length > 200 ? "..." : ""}
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>
@@ -252,6 +517,192 @@ export function SimpleRagView(props: {
       </div>
 
       <LLMChatPanel activeProject={props.activeProject} selectedDocuments={selectedDocsList} />
+
+      {projectPickerOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000
+          }}
+          onClick={() => setProjectPickerOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "#0a0a0a",
+              border: "1px solid #333",
+              borderRadius: "8px",
+              padding: "24px",
+              minWidth: "600px",
+              maxWidth: "800px",
+              maxHeight: "80vh",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{marginBottom: "16px", color: "#4a9eff"}}>Select Project</h3>
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={projectSearch}
+              onChange={(e) => setProjectSearch(e.target.value)}
+              className="input"
+              style={{marginBottom: "16px"}}
+              autoFocus
+            />
+            <div style={{
+              flex: 1,
+              overflowY: "auto",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
+              gap: "12px",
+              marginBottom: "16px"
+            }}>
+              {filteredProjects.length === 0 ? (
+                <div style={{color: "#666", padding: "20px", textAlign: "center", gridColumn: "1/-1"}}>
+                  {projectSearch ? "No projects match your search" : "No projects yet. Create one!"}
+                </div>
+              ) : (
+                filteredProjects.map(project => (
+                  <div
+                    key={project.id}
+                    onClick={() => {
+                      // Ensure project exists in parent state before selecting
+                      props.upsertProject({
+                        id: project.id,
+                        name: project.name,
+                        provider: project.provider || "rag",
+                      });
+                      props.setActiveProjectId(project.id);
+                      setProjectPickerOpen(false);
+                      setProjectSearch("");
+                    }}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: props.activeProject?.id === project.id ? "#1a3a1a" : "#1a1a1a",
+                      border: `1px solid ${props.activeProject?.id === project.id ? "#4aff4a" : "#333"}`,
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      transition: "all 0.2s"
+                    }}
+                    onMouseEnter={(e) => {
+                      if (props.activeProject?.id !== project.id) {
+                        e.currentTarget.style.backgroundColor = "#2a2a2a";
+                        e.currentTarget.style.borderColor = "#4a9eff";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (props.activeProject?.id !== project.id) {
+                        e.currentTarget.style.backgroundColor = "#1a1a1a";
+                        e.currentTarget.style.borderColor = "#333";
+                      }
+                    }}
+                  >
+                    <div style={{fontWeight: "bold", color: "#c7ffe4", marginBottom: "4px"}}>
+                      {project.name}
+                    </div>
+                    {(project as any).description && (
+                      <div style={{fontSize: "11px", color: "#aaa", marginBottom: "2px"}}>
+                        {(project as any).description}
+                      </div>
+                    )}
+                    <div style={{fontSize: "12px", color: project.provider === "rag" ? "#ff9e4a" : "#888"}}>
+                      {project.provider === "rag" ? "from RAG docs" : project.provider}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setProjectPickerOpen(false);
+                setProjectSearch("");
+              }}
+              className="btn btn-ghost"
+              style={{alignSelf: "flex-end"}}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {newProjectOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000
+          }}
+          onClick={() => setNewProjectOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "#0a0a0a",
+              border: "1px solid #333",
+              borderRadius: "8px",
+              padding: "24px",
+              minWidth: "400px",
+              maxWidth: "500px"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{marginBottom: "20px", color: "#4a9eff"}}>Create New Forgejo Project</h3>
+            <div style={{marginBottom: "20px"}}>
+              <label style={{display: "block", marginBottom: "8px", color: "#888"}}>
+                Project Name
+              </label>
+              <input
+                type="text"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="my-project"
+                className="input"
+                style={{width: "100%"}}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') createNewProject();
+                  if (e.key === 'Escape') setNewProjectOpen(false);
+                }}
+                autoFocus
+              />
+              <div style={{fontSize: "12px", color: "#666", marginTop: "4px"}}>
+                Will be created in Forgejo at: vault.wopr.systems/{newProjectName || 'project-name'}
+              </div>
+            </div>
+            <div style={{display: "flex", gap: "10px", justifyContent: "flex-end"}}>
+              <button
+                onClick={() => setNewProjectOpen(false)}
+                className="btn btn-ghost"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createNewProject}
+                disabled={!newProjectName.trim()}
+                className="btn btn-primary"
+              >
+                Create Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

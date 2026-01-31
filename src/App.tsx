@@ -7,6 +7,8 @@ import {
   listDocuments,
   uploadDocument,
   queryDocuments,
+  listProjects,
+  createMirrorProject,
   runPipeline,
   type DocumentItem,
   type Health,
@@ -430,10 +432,23 @@ function PipelineView(props: {
     setNewRepoUrl("");
     setNewOpen(true);
   }
-  function createProject() {
+  async function createProject() {
     const name = newName.trim();
     if (!name) return;
     const norm = normalizeRepoUrl(newProvider, newRepo, newRepoUrl);
+
+    // If it's not a Forgejo repo, create a mirror in Forgejo
+    if (newProvider !== 'forgejo' && norm.repoUrl) {
+      try {
+        await createMirrorProject(name, norm.repoUrl, `Mirror of ${norm.repoUrl}`);
+        // Success! The mirror will appear in Forgejo repos
+        alert(`Mirror created successfully! "${name}" will sync from ${norm.repoUrl} every 8 hours.`);
+      } catch (error: any) {
+        alert(`Failed to create mirror: ${error.message || String(error)}`);
+        return;
+      }
+    }
+
     const p: ReactorProject = {
       id: uid(),
       name,
@@ -721,10 +736,39 @@ export default function App() {
       setTasksLoading(false);
     }
   }
+  async function refreshProjects() {
+    try {
+      const result = await listProjects();
+      if (result.projects && result.projects.length > 0) {
+        // Merge Forgejo projects with existing localStorage projects
+        const forgejoProjects = result.projects.map(p => ({
+          id: p.id,
+          name: p.name,
+          provider: p.provider as RepoProvider,
+          repo: p.name,
+          repoUrl: `https://vault.wopr.systems/${p.id}`,
+          createdAt: new Date().toISOString()
+        }));
+        setProjects(prev => {
+          // Keep local projects, add new Forgejo ones
+          const combined = [...prev];
+          forgejoProjects.forEach(fp => {
+            if (!combined.find(p => p.id === fp.id)) {
+              combined.push(fp);
+            }
+          });
+          return combined;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects from Forgejo:', error);
+    }
+  }
   useEffect(() => {
     refreshHealth();
     refreshModels();
     refreshTasks();
+    refreshProjects();
   }, []);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -835,7 +879,7 @@ export default function App() {
             <div className="top-bar-title">
               <div>ReactorAI™</div>
               <div style={{ fontSize: 10, opacity: 0.8 }}>
-                by NodeZ3r0 @ Blackout Labs
+                by NodeZ3r0 @ WOPR Systems
               </div>
             </div>
             <div className="top-bar-subtitle">Multi-model pipeline · RAG · Repo operations</div>
@@ -877,14 +921,12 @@ export default function App() {
           />
         )}
         {activeView === "rag" && (
-          <SimpleRagView 
+          <SimpleRagView
             activeProject={activeProject}
             projects={projects}
             setActiveProjectId={setActiveProjectId}
-            onNewProject={() => {
-              setActiveView("pipeline");
-              // Pipeline view will handle project creation
-            }}
+            onNewProject={() => setActiveView("pipeline")}
+            upsertProject={upsertProject}
           />
         )}
       </main>
