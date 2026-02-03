@@ -163,25 +163,41 @@ export function SimpleRagView(props: {
   const selectedDocsList = Array.from(selectedDocs).map(idx => filteredDocs[idx]).filter(Boolean);
 
   // Merge Forgejo repos + RAG-derived projects, deduplicate, sort alphabetically
+  // Show doc counts for all projects that have RAG documents
   const allProjects = (() => {
     const byName = new Map<string, {id: string; name: string; provider: string; description?: string}>();
-    // Add Forgejo repos
-    for (const p of props.projects) {
-      byName.set(p.name.toLowerCase(), {...p});
-    }
-    // Add projects derived from RAG document paths/metadata
+
+    // First pass: count RAG docs per project
+    const ragCounts = new Map<string, number>();
     for (const doc of documents) {
       const projectName = doc.metadata?.project_name
         || (doc.source?.includes("/") ? doc.source.split("/")[0] : null);
-      if (projectName && !byName.has(projectName.toLowerCase())) {
+      if (projectName) {
+        ragCounts.set(projectName, (ragCounts.get(projectName) || 0) + 1);
+      }
+    }
+
+    // Add Forgejo repos, enriched with doc counts if available
+    for (const p of props.projects) {
+      const count = ragCounts.get(p.name) || 0;
+      byName.set(p.name.toLowerCase(), {
+        ...p,
+        description: count > 0 ? `${count} docs in RAG` : "forgejo",
+      });
+    }
+
+    // Add RAG-only projects (not in Forgejo)
+    for (const [projectName, count] of ragCounts.entries()) {
+      if (!byName.has(projectName.toLowerCase())) {
         byName.set(projectName.toLowerCase(), {
           id: projectName,
           name: projectName,
           provider: "rag",
-          description: `${documents.filter(d => (d.metadata?.project_name || (d.source?.includes("/") ? d.source.split("/")[0] : "")) === projectName).length} docs in RAG`,
+          description: `${count} docs in RAG`,
         });
       }
     }
+
     return Array.from(byName.values()).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   })();
 
@@ -540,8 +556,8 @@ export function SimpleRagView(props: {
               border: "1px solid #333",
               borderRadius: "8px",
               padding: "24px",
-              minWidth: "600px",
-              maxWidth: "800px",
+              width: "90vw",
+              maxWidth: "800px", boxSizing: "border-box" as const,
               maxHeight: "80vh",
               overflow: "hidden",
               display: "flex",
@@ -562,64 +578,140 @@ export function SimpleRagView(props: {
             <div style={{
               flex: 1,
               overflowY: "auto",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-              gap: "12px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0px",
               marginBottom: "16px"
             }}>
               {filteredProjects.length === 0 ? (
-                <div style={{color: "#666", padding: "20px", textAlign: "center", gridColumn: "1/-1"}}>
+                <div style={{color: "#666", padding: "20px", textAlign: "center"}}>
                   {projectSearch ? "No projects match your search" : "No projects yet. Create one!"}
                 </div>
               ) : (
-                filteredProjects.map(project => (
-                  <div
-                    key={project.id}
-                    onClick={() => {
-                      // Ensure project exists in parent state before selecting
-                      props.upsertProject({
-                        id: project.id,
-                        name: project.name,
-                        provider: project.provider || "rag",
-                      });
-                      props.setActiveProjectId(project.id);
-                      setProjectPickerOpen(false);
-                      setProjectSearch("");
-                    }}
-                    style={{
-                      padding: "16px",
-                      backgroundColor: props.activeProject?.id === project.id ? "#1a3a1a" : "#1a1a1a",
-                      border: `1px solid ${props.activeProject?.id === project.id ? "#4aff4a" : "#333"}`,
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      transition: "all 0.2s"
-                    }}
-                    onMouseEnter={(e) => {
-                      if (props.activeProject?.id !== project.id) {
-                        e.currentTarget.style.backgroundColor = "#2a2a2a";
-                        e.currentTarget.style.borderColor = "#4a9eff";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (props.activeProject?.id !== project.id) {
-                        e.currentTarget.style.backgroundColor = "#1a1a1a";
-                        e.currentTarget.style.borderColor = "#333";
-                      }
-                    }}
-                  >
-                    <div style={{fontWeight: "bold", color: "#c7ffe4", marginBottom: "4px"}}>
-                      {project.name}
-                    </div>
-                    {(project as any).description && (
-                      <div style={{fontSize: "11px", color: "#aaa", marginBottom: "2px"}}>
-                        {(project as any).description}
+                (() => {
+                  // Group related projects for cleaner organization
+                  const groupPatterns: [string, RegExp][] = [
+                    ["Reactor", /^reactor/i],
+                    ["WOPR", /^wopr/i],
+                    ["DEFCON", /^defcon/i],
+                  ];
+
+                  type ProjType = typeof filteredProjects[0];
+                  const groups: Record<string, ProjType[]> = {};
+                  const standalone: ProjType[] = [];
+                  const used = new Set<string>();
+
+                  for (const [gName, pattern] of groupPatterns) {
+                    const matches = filteredProjects.filter(p =>
+                      pattern.test(p.name) || pattern.test(p.id || "")
+                    );
+                    if (matches.length > 1) {
+                      groups[gName] = matches;
+                      matches.forEach(m => used.add(m.name));
+                    }
+                  }
+                  filteredProjects.forEach(p => {
+                    if (!used.has(p.name)) standalone.push(p);
+                  });
+
+                  const renderItem = (project: ProjType, indent = false) => (
+                    <div
+                      key={project.id}
+                      onClick={() => {
+                        props.upsertProject({ id: project.id, name: project.name, provider: project.provider || "rag" });
+                        props.setActiveProjectId(project.id);
+                        setProjectPickerOpen(false);
+                        setProjectSearch("");
+                      }}
+                      style={{
+                        padding: indent ? "6px 12px 6px 28px" : "6px 12px",
+                        backgroundColor: props.activeProject?.id === project.id ? "#1a3a1a" : "transparent",
+                        borderLeft: props.activeProject?.id === project.id ? "3px solid #4aff4a" : "3px solid transparent",
+                        borderBottom: "1px solid #111",
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "8px"
+                      }}
+                      onMouseEnter={(e) => {
+                        if (props.activeProject?.id !== project.id) {
+                          e.currentTarget.style.backgroundColor = "#0d1520";
+                          e.currentTarget.style.borderLeftColor = "#4a9eff";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (props.activeProject?.id !== project.id) {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                          e.currentTarget.style.borderLeftColor = "transparent";
+                        }
+                      }}
+                    >
+                      <span style={{fontWeight: 500, color: "#c7ffe4", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                        {project.name}
+                      </span>
+                      <div style={{display: "flex", alignItems: "center", gap: "6px", flexShrink: 0}}>
+                        {(project as any).description && (
+                          <span style={{fontSize: "11px", color: "#555", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                            {(project as any).description}
+                          </span>
+                        )}
+                        <span style={{
+                          fontSize: "9px",
+                          color: (project as any).description?.includes("docs in RAG") ? "#ff9e4a" : "#444",
+                          padding: "1px 5px",
+                          backgroundColor: (project as any).description?.includes("docs in RAG") ? "rgba(255,158,74,0.1)" : "#0a0a0a",
+                          borderRadius: "3px",
+                          border: (project as any).description?.includes("docs in RAG") ? "1px solid rgba(255,158,74,0.2)" : "1px solid #1a1a1a",
+                          whiteSpace: "nowrap",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em"
+                        }}>
+                          {(project as any).description?.includes("docs in RAG") ? "RAG" : project.provider}
+                        </span>
                       </div>
-                    )}
-                    <div style={{fontSize: "12px", color: project.provider === "rag" ? "#ff9e4a" : "#888"}}>
-                      {project.provider === "rag" ? "from RAG docs" : project.provider}
                     </div>
-                  </div>
-                ))
+                  );
+
+                  const groupKeys = Object.keys(groups).sort();
+
+                  return (
+                    <>
+                      {groupKeys.map(gName => (
+                        <div key={gName} style={{marginBottom: "4px"}}>
+                          <div style={{
+                            padding: "6px 10px 4px",
+                            fontSize: "10px",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.16em",
+                            color: "#4a9eff",
+                            fontWeight: 600,
+                            borderBottom: "1px solid #0d2040"
+                          }}>
+                            {gName} <span style={{color: "#333", fontWeight: 400}}>({groups[gName].length})</span>
+                          </div>
+                          {groups[gName].map(p => renderItem(p, true))}
+                        </div>
+                      ))}
+                      {standalone.length > 0 && groupKeys.length > 0 && (
+                        <div style={{
+                          padding: "6px 10px 4px",
+                          fontSize: "10px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.16em",
+                          color: "#6fa58f",
+                          fontWeight: 600,
+                          borderBottom: "1px solid #1a2a22",
+                          marginTop: "4px"
+                        }}>
+                          Other <span style={{color: "#333", fontWeight: 400}}>({standalone.length})</span>
+                        </div>
+                      )}
+                      {standalone.map(p => renderItem(p, false))}
+                    </>
+                  );
+                })()
               )}
             </div>
             <button

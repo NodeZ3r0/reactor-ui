@@ -589,3 +589,21 @@ body {
     align-items: flex-start;
   }
 }
+
+/* Dark theme for native select dropdowns */
+option {
+  background-color: #020b0d;
+  color: #c7ffe4;
+}
+
+option:checked {
+  background-color: #0a2a1a;
+}
+
+option:hover {
+  background-color: #103327;
+}
+
+select option {
+  padding: 6px 10px;
+}
