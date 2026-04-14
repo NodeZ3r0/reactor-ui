@@ -14,6 +14,8 @@ import {
   type Health,
   type ModelsStatus,
   type TaskItem,
+  runMultiAgent,
+  type MultiAgentResult,
 } from "./api";
 import { SimpleRagView } from "./SimpleRagView";
 type View = "dashboard" | "pipeline" | "rag";
@@ -400,6 +402,12 @@ function RagView(props: {
     </div>
   );
 }
+// NEW IDE-STYLE PIPELINE VIEW
+// Replace the old PipelineView function with this
+
+// VS CODE STYLE IDE - ACTUALLY LOADS REPOS FROM FORGEJO
+// VS CODE STYLE IDE - IMPROVED UI
+// VS CODE STYLE IDE - WITH RAG UPLOAD AND DRAGGABLE TERMINAL
 function PipelineView(props: {
   projects: ReactorProject[];
   activeProjectId: string | null;
@@ -407,272 +415,421 @@ function PipelineView(props: {
   upsertProject: (p: ReactorProject) => void;
   updateProject: (id: string, patch: Partial<ReactorProject>) => void;
 }) {
-  const activeProject = useMemo(
-    () => props.projects.find((p) => p.id === props.activeProjectId) || null,
-    [props.projects, props.activeProjectId]
-  );
-  const [goal, setGoal] = useState("");
-  const [phaseLog, setPhaseLog] = useState<string>("");
-  const [ragUsed, setRagUsed] = useState<boolean | null>(null);
-  const [ragSources, setRagSources] = useState<string[]>([]);
-  const [ragContext, setRagContext] = useState<string>("");
-  const [running, setRunning] = useState(false);
-  const [newOpen, setNewOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newProvider, setNewProvider] = useState<RepoProvider>("forgejo");
-  const [newRepo, setNewRepo] = useState("");
-  const [newRepoUrl, setNewRepoUrl] = useState("");
-  const [code, setCode] = useState<string>(
-    `// Reactor Editor\n// Use pipeline run output and refine here.\n`
-  );
-  function openNewProject() {
-    setNewName("");
-    setNewProvider("forgejo");
-    setNewRepo("");
-    setNewRepoUrl("");
-    setNewOpen(true);
-  }
-  async function createProject() {
-    const name = newName.trim();
-    if (!name) return;
-    const norm = normalizeRepoUrl(newProvider, newRepo, newRepoUrl);
+  const [repos, setRepos] = useState<Array<{name: string; full_name: string; default_branch: string; category?: string}>>([]);
+  const [selectedRepo, setSelectedRepo] = useState<string>("");
+  const [branches, setBranches] = useState<Array<{name: string}>>([]);
+  const [branch, setBranch] = useState("main");
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [files, setFiles] = useState<Array<{path: string; type: string}>>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [currentFile, setCurrentFile] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [language, setLanguage] = useState("typescript");
+  const [modified, setModified] = useState(false);
+  const [output, setOutput] = useState("JOSHUA / REACTOR IDE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nHey \u2014 I'm Joshua, your AI coding partner.\nJust type what you need, or use 'help' for commands.\n\n");
+  const [showTerminal, setShowTerminal] = useState(true);
+  const [showRagPanel, setShowRagPanel] = useState(false);
+  const [ragDragging, setRagDragging] = useState(false);
+  const [ragUploading, setRagUploading] = useState(false);
+  const [ragStatus, setRagStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [models, setModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState("qwen2.5-coder:7b");
+  const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [terminalHeight, setTerminalHeight] = useState(220);
+  const [ragPanelWidth, setRagPanelWidth] = useState(280);
+  const [resizing, setResizing] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const terminalOutputRef = useRef<HTMLDivElement>(null);
+  const [cmd, setCmd] = useState("");
+  const [chatHistory, setChatHistory] = useState<Array<{role: string; content: string}>>([]);
+  const [showMultiAgent, setShowMultiAgent] = useState(false);
+  const [maTask, setMaTask] = useState("");
+  const [maRunning, setMaRunning] = useState(false);
+  const [multiAgentResult, setMultiAgentResult] = useState<MultiAgentResult | null>(null);
+  const [maAutoApply, setMaAutoApply] = useState(false);
 
-    // If it's not a Forgejo repo, create a mirror in Forgejo
-    if (newProvider !== 'forgejo' && norm.repoUrl) {
-      try {
-        await createMirrorProject(name, norm.repoUrl, `Mirror of ${norm.repoUrl}`);
-        // Success! The mirror will appear in Forgejo repos
-        alert(`Mirror created successfully! "${name}" will sync from ${norm.repoUrl} every 8 hours.`);
-      } catch (error: any) {
-        alert(`Failed to create mirror: ${error.message || String(error)}`);
-        return;
-      }
-    }
+  useEffect(() => {
+    fetch("/api/forgejo/repos").then(r => r.json()).then(data => {
+      setRepos(data.repos || []);
+    }).catch(e => setOutput(prev => prev + "[ERROR] " + e + "\n"));
+    fetch("/api/ollama/models").then(r => r.json()).then(data => {
+      const names = (data.models?.map((m: any) => m.name) || []);
+      setModels(names);
+      if (names.length > 0) setSelectedModel(names[0]);
+    }).catch(() => {});
+  }, []);
 
-    const p: ReactorProject = {
-      id: uid(),
-      name,
-      provider: newProvider,
-      repo: norm.repo,
-      repoUrl: norm.repoUrl,
-      createdAt: nowIso(),
-    };
-    props.upsertProject(p);
-    props.setActiveProjectId(p.id);
-    setNewOpen(false);
-  }
-  async function onRunPipeline() {
-    const g = goal.trim();
-    if (!g) return;
-    if (!activeProject) {
-      setPhaseLog("ERROR: No active Project selected.\nCreate/select a project first.\n");
-      return;
-    }
-    setRunning(true);
-    setPhaseLog("");
+  useEffect(() => {
+    if (!selectedRepo) return;
+    setLoadingBranches(true);
+    const [owner, repo] = selectedRepo.split("/");
+    fetch("/api/forgejo/branches/" + owner + "/" + repo).then(r => r.json()).then(data => setBranches(data.branches || [])).catch(() => setBranches([])).finally(() => setLoadingBranches(false));
+  }, [selectedRepo]);
+
+  useEffect(() => {
+    if (!selectedRepo || !branch) return;
+    setLoadingFiles(true);
+    setFiles([]);
+    const [owner, repo] = selectedRepo.split("/");
+    fetch("/api/forgejo/tree/" + owner + "/" + repo + "?ref=" + encodeURIComponent(branch)).then(r => r.json()).then(data => {
+      const tree = data.tree || [];
+      setFiles(tree.filter((f: any) => f.type === "blob"));
+      setOutput(prev => prev + "[LOADED] " + tree.length + " files from " + repo + " (" + branch + ")\n");
+    }).catch(e => setOutput(prev => prev + "[ERROR] " + e + "\n")).finally(() => setLoadingFiles(false));
+  }, [selectedRepo, branch]);
+
+  useEffect(() => { if (terminalOutputRef.current) terminalOutputRef.current.scrollTop = terminalOutputRef.current.scrollHeight; }, [output]);
+
+  async function openFile(path: string) {
+    if (!selectedRepo) return;
+    const [owner, repo] = selectedRepo.split("/");
+    setOutput(prev => prev + "[OPEN] " + path + "\n");
     try {
-      const norm = normalizeRepoUrl(activeProject.provider, activeProject.repo, activeProject.repoUrl);
-      const payload: any = {
-        goal: g,
-        project: activeProject.name,
-        provider: activeProject.provider,
-      };
-      if (activeProject.provider === "forgejo") {
-        payload.repo = norm.repo;
-      } else {
-        payload.repo_url = norm.repoUrl || "";
-        payload.repo = norm.repo || "";
+      const res = await fetch("/api/forgejo/file/" + owner + "/" + repo + "/" + encodeURIComponent(path) + "?ref=" + encodeURIComponent(branch));
+      const data = await res.json();
+      setCode(data.content || "");
+      setCurrentFile(path);
+      setModified(false);
+      const ext = path.split(".").pop()?.toLowerCase() || "";
+      const langMap: Record<string, string> = { ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", py: "python", rs: "rust", go: "go", java: "java", c: "c", cpp: "cpp", css: "css", scss: "scss", html: "html", json: "json", md: "markdown", yml: "yaml", yaml: "yaml", sh: "shell", bash: "shell", sql: "sql" };
+      setLanguage(langMap[ext] || "plaintext");
+    } catch (e) { setOutput(prev => prev + "[ERROR] " + e + "\n"); }
+  }
+
+  async function uploadToRag(file: File) {
+    setRagUploading(true);
+    setRagStatus("Uploading " + file.name + "...");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/rag/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.success) { setRagStatus("✓ " + data.message); setOutput(prev => prev + "[RAG] Uploaded: " + file.name + "\n"); }
+      else { setRagStatus("✗ " + (data.error || "Upload failed")); }
+    } catch (e) { setRagStatus("✗ Error: " + e); }
+    finally { setRagUploading(false); setTimeout(() => setRagStatus(null), 5000); }
+  }
+
+  function handleRagDrop(e: React.DragEvent) { e.preventDefault(); setRagDragging(false); Array.from(e.dataTransfer.files).forEach(f => uploadToRag(f)); }
+  function handleRagFileSelect(e: React.ChangeEvent<HTMLInputElement>) { Array.from(e.target.files || []).forEach(f => uploadToRag(f)); e.target.value = ""; }
+
+  async function uploadCurrentToRag() {
+    if (!currentFile || !code) return;
+    setRagUploading(true);
+    setRagStatus("Indexing " + currentFile + "...");
+    try {
+      await fetch("/context/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: code, source: currentFile, metadata: { repo: selectedRepo, branch, language } }) });
+      setRagStatus("✓ Indexed: " + currentFile);
+      setOutput(prev => prev + "[RAG] Indexed: " + currentFile + "\n");
+    } catch (e) { setRagStatus("✗ Error: " + e); }
+    finally { setRagUploading(false); setTimeout(() => setRagStatus(null), 5000); }
+  }
+
+  async function askAI(prompt: string) {
+    setOutput(prev => prev + "\n> " + prompt + "\n[Joshua] Thinking...\n");
+    try {
+      const fileContext = currentFile ? "File: " + currentFile + "\n```" + language + "\n" + code.slice(0, 3000) + "\n```\n\n" : "";
+      const userMsg = { role: "user", content: fileContext + prompt };
+      const newHistory = [...chatHistory, userMsg];
+      setChatHistory(newHistory);
+      const messages = [{ role: "system", content: "You are Joshua, the Reactor AI. You are warm, knowledgeable, and direct. You have full access to RAG docs, repos, and server tools. Give clear, actionable answers. Use code blocks. Be helpful like a brilliant friend, not a cold robot." }, ...newHistory.slice(-20)];
+      const res = await fetch("/api/ollama/chat-with-tools", { method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": "N2WCVzIwD3L-btj3nId2OXZPn8pQNsd02S2EY3nidVE" }, body: JSON.stringify({ model: selectedModel, messages, enable_tools: true }) });
+      const text = await res.text();
+      const lines = text.trim().split("\n").filter(l => l.trim());
+      let finalContent = "";
+      const toolResults: string[] = [];
+      for (const line of lines) {
+        try {
+          const obj = JSON.parse(line);
+          if (obj.type === "token" && obj.content) finalContent += obj.content;
+          else if (obj.type === "final") finalContent = obj.content || finalContent;
+          else if (obj.type === "tool_result") toolResults.push("[TOOL:" + (obj.tool || "") + "] " + (obj.output || obj.output_preview || "").slice(0, 200));
+          else if (obj.type === "tool_call") toolResults.push("[CALLING:" + (obj.tool || "") + "]");
+          else if (obj.type === "error") finalContent = "Error: " + (obj.message || obj.error || "unknown");
+          else if (obj.message?.content) finalContent = obj.message.content;
+        } catch {}
       }
-      const res = await runPipeline(payload);
-      setRagUsed(res.rag_used ?? false);
-      setRagSources(res.rag_sources ?? []);
-      setRagContext(res.rag_context ?? "");
-      props.updateProject(activeProject.id, { lastRunAt: nowIso() });
-      const out = typeof res === "string" ? res : JSON.stringify(res, null, 2);
-      setPhaseLog(out);
-      if (res && typeof res === "object") {
-        const codeCandidate =
-          (res.code as string) ||
-          (res.generated_code as string) ||
-          (res.output_code as string) ||
-          "";
-        if (codeCandidate) setCode(codeCandidate);
+      const toolInfo = toolResults.length ? "\n" + toolResults.join("\n") + "\n" : "";
+      const answer = finalContent || "No response";
+      setChatHistory(prev => [...prev, { role: "assistant", content: answer }]);
+      setOutput(prev => prev.replace("[Joshua] Thinking...\n", "") + toolInfo + "[Joshua] " + answer + "\n");
+    } catch (e) { setOutput(prev => prev.replace("[Joshua] Thinking...\n", "") + "[ERROR] " + e + "\n"); }
+  }
+
+  function runCommand() {
+    const c = cmd.trim();
+    if (!c) return;
+    setCmd("");
+    if (c.startsWith("ai ") || c.startsWith("ask ")) { askAI(c.replace(/^(ai|ask) /, "")); }
+    else if (c === "help") { setOutput(prev => prev + "\nJOSHUA COMMANDS\n━━━━━━━━━━━━━━━━━━━━━━━━\n  Just type naturally    Ask Joshua anything\n  ai <question>          Explicit AI query\n  save                   Save current file\n  index                  Index file to RAG\n  rag                    Toggle RAG panel\n  clear                  Clear terminal\n  help                   This help\n\nTip: You don't need the 'ai' prefix \u2014 just type your question.\n"); }
+    else if (c === "clear") { setChatHistory([]); setOutput("JOSHUA / REACTOR IDE\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"); }
+    else if (c === "rag") { setShowRagPanel(prev => !prev); }
+    else if (c === "index" && currentFile) { uploadCurrentToRag(); }
+    else if (c === "save" && currentFile && selectedRepo) { saveFile(); }
+    else { askAI(c); }
+  }
+
+  async function saveFile() {
+    if (!currentFile || !selectedRepo) return;
+    setOutput(prev => prev + "[SAVE] " + currentFile + "...\n");
+    const [owner, repo] = selectedRepo.split("/");
+    try {
+      const res = await fetch("/api/forgejo/file/" + owner + "/" + repo + "/" + encodeURIComponent(currentFile), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: code, branch, message: "Update " + currentFile + " via Reactor IDE" }) });
+      const data = await res.json();
+      if (data.error) { setOutput(prev => prev + "[ERROR] " + data.error + "\n"); }
+      else { setOutput(prev => prev + "[SAVED] " + currentFile + "\n"); setModified(false); }
+    } catch (e) { setOutput(prev => prev + "[ERROR] " + e + "\n"); }
+  }
+
+  async function runMultiAgentTask() {
+    if (!maTask.trim()) return;
+    setMaRunning(true);
+    setMultiAgentResult(null);
+    setOutput(prev => prev + "\n[MULTI-AGENT] Dispatching: " + maTask.trim() + "\n");
+    try {
+      const [owner, repo] = selectedRepo ? selectedRepo.split("/") : ["", ""];
+      const result = await runMultiAgent({
+        task_description: maTask.trim(),
+        repo_owner: owner || undefined,
+        repo_name: repo || undefined,
+        branch: branch || undefined,
+        file_paths: currentFile ? [currentFile] : undefined,
+        auto_apply: maAutoApply,
+      });
+      setMultiAgentResult(result);
+      if (result.ok) {
+        const agents = result.evidence?.agents_dispatched?.join(", ") || "none";
+        setOutput(prev => prev + "[MULTI-AGENT] Agents: " + agents + "\n");
+        setOutput(prev => prev + "[MULTI-AGENT] " + (result.merged_summary || result.message) + "\n");
+        if (result.evidence?.security_veto) {
+          setOutput(prev => prev + "[SECURITY] VETOED - proposal blocked\n");
+        }
+        if (result.risks && result.risks.length > 0) {
+          setOutput(prev => prev + "[RISKS] " + result.risks.join("; ") + "\n");
+        }
+        setOutput(prev => prev + "[MULTI-AGENT] Done in " + (result.duration_ms || 0) + "ms\n");
+      } else {
+        setOutput(prev => prev + "[ERROR] " + (result.error || "Unknown error") + "\n");
       }
     } catch (e: any) {
-      const msg =
-        e?.response?.data
-          ? JSON.stringify(e.response.data, null, 2)
-          : e?.message || String(e);
-      setPhaseLog(`ERROR:\n${msg}\n`);
+      setOutput(prev => prev + "[ERROR] " + e.message + "\n");
     } finally {
-      setRunning(false);
+      setMaRunning(false);
     }
   }
-  const recentProjects = useMemo(() => {
-    return [...props.projects].sort((a, b) => {
-      const ta = Date.parse(a.lastRunAt || a.createdAt);
-      const tb = Date.parse(b.lastRunAt || b.createdAt);
-      return tb - ta;
+
+    const folderTree = useMemo(() => {
+    const root: Record<string, any> = { __files: [] };
+    files.forEach(f => {
+      const parts = f.path.split("/");
+      let current = root;
+      for (let i = 0; i < parts.length - 1; i++) { if (!current[parts[i]]) current[parts[i]] = { __files: [] }; current = current[parts[i]]; }
+      current.__files.push(parts[parts.length - 1]);
     });
-  }, [props.projects]);
-  const link = activeProject ? repoLink(activeProject) : "";
-  const nonForgejo = activeProject && activeProject.provider !== "forgejo";
+    return root;
+  }, [files]);
+
+  function toggleFolder(path: string) { setExpandedFolders(prev => { const next = new Set(prev); if (next.has(path)) next.delete(path); else next.add(path); return next; }); }
+
+  function toggleCategory(cat: string) { setExpandedCategories(prev => { const next = new Set(prev); if (next.has(cat)) next.delete(cat); else next.add(cat); return next; }); }
+
+  const reposByCategory = (() => {
+    const groups: Record<string, typeof repos> = {};
+    repos.forEach(r => { const cat = r.category || "Other"; if (!groups[cat]) groups[cat] = []; groups[cat].push(r); });
+    return groups;
+  })();
+  const categoryOrder = ["AI & Dev Tools", "Core Infrastructure", "Social & Communication", "Content & Media", "Business & Productivity", "Storage & Security", "Other"];
+
+  function renderTree(node: Record<string, any>, basePath: string = "", depth: number = 0): JSX.Element[] {
+    const items: JSX.Element[] = [];
+    Object.keys(node).filter(k => k !== "__files").sort().forEach(folder => {
+      const fullPath = basePath ? basePath + "/" + folder : folder;
+      const isExpanded = expandedFolders.has(fullPath);
+      items.push(<div key={fullPath} className="tree-item folder" style={{ paddingLeft: depth * 16 + 8 }} onClick={() => toggleFolder(fullPath)}><span className="tree-icon">{isExpanded ? "▼" : "▶"}</span><span className="tree-name">{folder}</span></div>);
+      if (isExpanded) items.push(...renderTree(node[folder], fullPath, depth + 1));
+    });
+    (node.__files || []).sort().forEach((file: string) => {
+      const fullPath = basePath ? basePath + "/" + file : file;
+      items.push(<div key={fullPath} className={"tree-item file " + (currentFile === fullPath ? "active" : "")} style={{ paddingLeft: depth * 16 + 8 }} onClick={() => openFile(fullPath)}><span className="tree-icon">◆</span><span className="tree-name">{file}</span></div>);
+    });
+    return items;
+  }
+
+  useEffect(() => {
+    if (!resizing) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      if (resizing === "sidebar") setSidebarWidth(Math.min(400, Math.max(150, e.clientX - rect.left)));
+      else if (resizing === "terminal") setTerminalHeight(Math.min(500, Math.max(120, rect.bottom - e.clientY)));
+      else if (resizing === "rag") setRagPanelWidth(Math.min(400, Math.max(200, rect.right - e.clientX)));
+    };
+    const handleMouseUp = () => setResizing(null);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => { document.removeEventListener("mousemove", handleMouseMove); document.removeEventListener("mouseup", handleMouseUp); };
+  }, [resizing]);
+
+  const getRepoName = (fullName: string) => fullName.split("/").pop() || fullName;
+
   return (
-    <div className="main-panels single">
-      <Panel
-        title="Pipeline & Editor"
-        right={
-          <div className="panel-actions">
-            <Button onClick={openNewProject} variant="ghost">
-              + New Project
-            </Button>
-          </div>
-        }
-      >
-        <div className="subsection-title">Section A — Project</div>
-        <div className="project-bar">
-          <div className="project-select">
-            <Select
-              value={props.activeProjectId || ""}
-              onChange={(e) => props.setActiveProjectId(e.target.value)}
-            >
-              <option value="" disabled>
-                Select project…
-              </option>
-              {recentProjects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} · {p.provider}
-                </option>
-              ))}
-            </Select>
-            {activeProject && (
-              <div className="project-meta">
-                <div className="muted small">
-                  Repo: <span className="mono">{repoDisplay(activeProject)}</span>
-                </div>
-                <div className="muted small">
-                  Last run: <span className="mono">{formatAgo(activeProject.lastRunAt)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="project-actions">
-            {activeProject && link && (
-              <a className="btn btn-ghost" href={link} target="_blank" rel="noreferrer">
-                Open Repo
-              </a>
-            )}
-          </div>
+    <div className="vscode-ide" ref={containerRef}>
+      <div className="vscode-topbar">
+        <div className="vscode-repo-select">
+          <span className="repo-label">{selectedRepo ? selectedRepo.split("/").pop() : "No repo"}</span>
         </div>
-        {nonForgejo && (
-          <div className="warn">
-            External repo selected ({activeProject?.provider}). If Spec Kit only pulls from Forgejo right now,
-            the run may fail until Spec Kit supports repo_url cloning for that provider.
-          </div>
-        )}
-        <Divider />
-        <div className="subsection-title">Run Pipeline</div>
-        <div className="row">
-          <TextInput
-            placeholder="Goal (what do we build/change?)"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-          />
-          <Button onClick={onRunPipeline} disabled={running}>
-            {running ? "Running..." : "Run Pipeline"}
-          </Button>
+
+        <div className="vscode-model">
+          <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}>
+            {models.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
-        <div className="grid2" style={{ marginTop: 10 }}>
-          <div className="panel-sub">
-            <div className="panel-sub-title">Editor</div>
-            <div className="editor-wrap">
-              <MonacoEditor
-                height="420px"
-                defaultLanguage="typescript"
-                value={code}
-                onChange={(v) => setCode(v || "")}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 13,
-                  wordWrap: "on",
-                  automaticLayout: true,
-                }}
-              />
-            </div>
-          </div>
-          <div className="panel-sub">
-            <div className="panel-sub-title">Run Output</div>
-            <pre className="pre">{phaseLog || (running ? "Running…" : "No output yet.")}</pre>
-          </div>
+        <div className="vscode-file-indicator">
+          {currentFile ? <span>{currentFile} {modified ? "●" : ""}</span> : <span className="muted">No file</span>}
         </div>
-        {newOpen && (
-          <div className="modal-overlay" onMouseDown={() => setNewOpen(false)}>
-            <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-              <div className="modal-title">New Project</div>
-              <div className="form">
-                <label className="label">
-                  Name
-                  <TextInput value={newName} onChange={(e) => setNewName(e.target.value)} />
-                </label>
-                <label className="label">
-                  Repo provider
-                  <Select
-                    value={newProvider}
-                    onChange={(e) => setNewProvider(e.target.value as RepoProvider)}
-                  >
-                    <option value="forgejo">forgejo</option>
-                    <option value="github">github</option>
-                    <option value="gitlab">gitlab</option>
-                    <option value="codeberg">codeberg</option>
-                    <option value="custom">custom</option>
-                  </Select>
-                </label>
-                <label className="label">
-                  Repo (Forgejo: owner/repo OR repo; Others: owner/repo optional)
-                  <TextInput value={newRepo} onChange={(e) => setNewRepo(e.target.value)} />
-                </label>
-                {newProvider !== "forgejo" && (
-                  <label className="label">
-                    Repo URL (https://…)
-                    <TextInput value={newRepoUrl} onChange={(e) => setNewRepoUrl(e.target.value)} />
-                  </label>
-                )}
-                <div className="modal-actions">
-                  <Button onClick={() => setNewOpen(false)} variant="ghost">
-                    Cancel
-                  </Button>
-                  <Button onClick={createProject}>Create</Button>
+        <button className={"ma-toggle-btn" + (showMultiAgent ? " active" : "")} onClick={() => setShowMultiAgent(p => !p)}>{showMultiAgent ? "Agents ON" : "Agents"}</button>
+        <button className="rag-toggle-btn" onClick={() => setShowRagPanel(p => !p)}>{showRagPanel ? "◀ RAG" : "RAG ▶"}</button>
+      </div>
+      <div className="vscode-main">
+        <div className="vscode-sidebar" style={{ width: sidebarWidth }}>
+          <div className="vscode-sidebar-header">REPOS</div>
+          <div className="repo-browser">
+            {categoryOrder.filter(cat => reposByCategory[cat]?.length).map(cat => (
+              <div key={cat} className="repo-category">
+                <div className="repo-category-header" onClick={() => toggleCategory(cat)}>
+                  <span className="tree-icon">{expandedCategories.has(cat) ? "\u25BC" : "\u25B6"}</span>
+                  <span className="cat-name">{cat}</span>
+                  <span className="cat-count">{reposByCategory[cat].length}</span>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-        <Divider />
-        <div className="subsection-title">Previously Run Projects</div>
-        {recentProjects.length ? (
-          <div className="table">
-            <div className="table-head">
-              <div>Name</div>
-              <div>Provider</div>
-              <div>Repo</div>
-              <div>Last Run</div>
-            </div>
-            {recentProjects.slice(0, 100).map((p) => (
-              <div className="table-row" key={p.id}>
-                <div className="mono">{p.name}</div>
-                <div>{p.provider}</div>
-                <div className="mono">{repoDisplay(p)}</div>
-                <div className="mono">{formatAgo(p.lastRunAt)}</div>
+                {expandedCategories.has(cat) && reposByCategory[cat].map(r => (
+                  <div key={r.full_name} className={"repo-item" + (selectedRepo === r.full_name ? " active" : "")} onClick={() => { setSelectedRepo(r.full_name); setBranch(r.default_branch || "main"); }}>
+                    {r.name.replace("wopr-", "")}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
-        ) : (
-          <div className="muted">No projects yet. Create one above.</div>
+          {selectedRepo && <>
+            <div className="vscode-sidebar-header">FILES <span className="file-count">({files.length})</span>
+              <select className="branch-inline" value={branch} onChange={e => setBranch(e.target.value)} disabled={loadingBranches}>
+                {branches.length === 0 && <option value={branch}>{branch}</option>}
+                {branches.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+              </select>
+            </div>
+            <div className="vscode-file-tree">{loadingFiles ? <div className="vscode-loading">Loading...</div> : files.length === 0 ? <div className="vscode-empty">No files</div> : renderTree(folderTree)}</div>
+          </>}
+          <div className="resize-handle-v" onMouseDown={() => setResizing("sidebar")} />
+        </div>
+        <div className="vscode-editor-area">
+          {currentFile ? (
+            <div className="vscode-editor" style={{ flex: 1 }}>
+              <MonacoEditor height="100%" language={language} value={code} onChange={v => { setCode(v || ""); setModified(true); }} theme="vs-dark" options={{ minimap: { enabled: window.innerWidth > 900 }, fontSize: 13, wordWrap: "on", automaticLayout: true, scrollBeyondLastLine: false, tabSize: 2 }} />
+            </div>
+          ) : null}
+          {(showTerminal || !currentFile) && (
+            <div className={"reactor-terminal" + (!currentFile ? " terminal-full" : "")} style={currentFile ? { height: terminalHeight } : { flex: 1 }}>
+              <div className="terminal-drag-handle" onMouseDown={() => setResizing("terminal")}>
+                <span className="drag-indicator">═══ JOSHUA ═══</span>
+                <button onClick={() => setShowTerminal(false)}>×</button>
+              </div>
+              <div className="terminal-output" ref={terminalOutputRef}><pre>{output}</pre></div>
+              <div className="terminal-input-box">
+                <span className="terminal-prompt">❯</span>
+                <textarea value={cmd} onChange={e => setCmd(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runCommand(); } }} placeholder="Ask Joshua anything, or type a command..." rows={2} />
+                <button className="terminal-send" onClick={runCommand}>▶</button>
+              </div>
+            </div>
+          )}
+        </div>
+        {showMultiAgent && (
+          <div className="multi-agent-panel">
+            <div className="ma-header"><span>Multi-Agent Pipeline</span><button onClick={() => setShowMultiAgent(false)}>x</button></div>
+            <div className="ma-task-input">
+              <textarea value={maTask} onChange={e => setMaTask(e.target.value)} placeholder="Describe the coding task for the agent team..." rows={3} disabled={maRunning} />
+              <div className="ma-controls">
+                <label className="ma-checkbox"><input type="checkbox" checked={maAutoApply} onChange={e => setMaAutoApply(e.target.checked)} /><span>Auto-apply (DEFCON)</span></label>
+                <button className="ma-run-btn" onClick={runMultiAgentTask} disabled={maRunning || !maTask.trim()}>{maRunning ? "Running..." : "Run Agents"}</button>
+              </div>
+            </div>
+            {multiAgentResult && (
+              <div className="ma-results">
+                <div className={"ma-status " + (multiAgentResult.ok ? (multiAgentResult.status === "vetoed" ? "vetoed" : "ok") : "error")}>
+                  {multiAgentResult.status === "vetoed" ? "VETOED" : multiAgentResult.ok ? "OK" : "ERROR"} - {multiAgentResult.message}
+                </div>
+                {multiAgentResult.evidence && (
+                  <div className="ma-agents">
+                    {multiAgentResult.evidence.agents_dispatched?.map((a: string) => {
+                      const responded = multiAgentResult.evidence.agents_responded?.includes(a);
+                      const hasError = multiAgentResult.evidence.errors?.some((e: any) => e.agent === a);
+                      const proposal = multiAgentResult.individual_proposals?.[a];
+                      return (<div key={a} className={"ma-agent-chip " + (hasError ? "error" : responded ? "ok" : "pending")}>
+                        <span className="ma-agent-name">{a.replace("_specialist", "").replace("_reviewer", " review")}</span>
+                        {proposal?.summary && <span className="ma-agent-summary">{proposal.summary.slice(0, 80)}</span>}
+                      </div>);
+                    })}
+                  </div>
+                )}
+                {multiAgentResult.evidence?.security_findings?.length > 0 && (
+                  <div className="ma-findings">
+                    <div className="ma-section-title">Security Findings</div>
+                    {multiAgentResult.evidence.security_findings.map((f: any, i: number) => (
+                      <div key={i} className={"ma-finding " + (f.severity || "").toLowerCase()}>{f.severity}: {f.description}</div>
+                    ))}
+                  </div>
+                )}
+                {multiAgentResult.risks && multiAgentResult.risks.length > 0 && (
+                  <div className="ma-risks">
+                    <div className="ma-section-title">Risks</div>
+                    {multiAgentResult.risks.map((r: string, i: number) => <div key={i} className="ma-risk">{r}</div>)}
+                  </div>
+                )}
+                {multiAgentResult.unified_diff && (
+                  <div className="ma-diff">
+                    <div className="ma-section-title">Proposed Changes ({multiAgentResult.files_touched?.length || 0} files)</div>
+                    <pre className="ma-diff-content">{multiAgentResult.unified_diff}</pre>
+                  </div>
+                )}
+                {multiAgentResult.test_commands && multiAgentResult.test_commands.length > 0 && (
+                  <div className="ma-tests">
+                    <div className="ma-section-title">Test Commands</div>
+                    {multiAgentResult.test_commands.map((t: string, i: number) => <div key={i} className="ma-test-cmd mono">{t}</div>)}
+                  </div>
+                )}
+                <div className="ma-meta">
+                  Run: {multiAgentResult.run_id} | {multiAgentResult.duration_ms}ms
+                </div>
+              </div>
+            )}
+          </div>
         )}
-      </Panel>
+        {showRagPanel && (
+          <div className="rag-panel" style={{ width: ragPanelWidth }}>
+            <div className="resize-handle-rag" onMouseDown={() => setResizing("rag")} />
+            <div className="rag-header"><span>◈ RAG UPLOAD</span><button onClick={() => setShowRagPanel(false)}>×</button></div>
+            <div className={"rag-dropzone " + (ragDragging ? "dragging" : "")} onDragOver={e => { e.preventDefault(); setRagDragging(true); }} onDragLeave={() => setRagDragging(false)} onDrop={handleRagDrop} onClick={() => fileInputRef.current?.click()}>
+              <input type="file" ref={fileInputRef} onChange={handleRagFileSelect} multiple hidden />
+              <div className="dropzone-content"><span className="dropzone-icon">⬆</span><span className="dropzone-text">Drop files here</span><span className="dropzone-subtext">or click to browse</span></div>
+            </div>
+            {ragStatus && <div className={"rag-status " + (ragStatus.startsWith("✓") ? "success" : ragStatus.startsWith("✗") ? "error" : "")}>{ragStatus}</div>}
+            {currentFile && <button className="rag-index-btn" onClick={uploadCurrentToRag} disabled={ragUploading}>{ragUploading ? "Indexing..." : "Index: " + currentFile.split("/").pop()}</button>}
+            <div className="rag-info"><p>Supported: txt, md, py, js, ts, json, yaml, html, css, sql, pdf</p></div>
+          </div>
+        )}
+      </div>
+      <div className="vscode-statusbar">
+        <span>{selectedRepo ? getRepoName(selectedRepo) : "No repo"}</span>
+        <span>{branch}</span>
+        <span>{language}</span>
+        <span>{files.length} files</span>
+        {!showTerminal && <button onClick={() => setShowTerminal(true)}>Joshua</button>}
+      </div>
     </div>
   );
 }
+
 export default function App() {
   const [activeView, setActiveView] = useState<View>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);

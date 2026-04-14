@@ -255,3 +255,74 @@ export async function chatContinue(request: {
 export async function checkDefconProposal(proposalId: string): Promise<any> {
   return j(await fetch("/api/defcon/proposals/" + proposalId));
 }
+
+
+// Multi-Agent Partners API
+export type MultiAgentRequest = {
+  task_description: string;
+  repo_owner?: string;
+  repo_name?: string;
+  branch?: string;
+  file_paths?: string[];
+  agent_names?: string[];
+  auto_apply?: boolean;
+};
+
+export type AgentEvidence = {
+  run_id: string;
+  task: string;
+  agents_dispatched: string[];
+  agents_responded: string[];
+  errors: Array<{ agent: string; error: string }>;
+  security_veto: boolean;
+  security_findings: any[];
+  merged_summary: string;
+  merged_files_touched: string[];
+  merged_risks: string[];
+  merged_test_commands: string[];
+  has_diff: boolean;
+  duration_ms: number;
+};
+
+export type MultiAgentResult = {
+  ok: boolean;
+  run_id: string;
+  status: string;
+  message: string;
+  evidence: AgentEvidence;
+  merged_summary?: string;
+  unified_diff?: string;
+  files_touched?: string[];
+  risks?: string[];
+  test_commands?: string[];
+  migration_plan?: string[];
+  individual_proposals?: Record<string, { ok: boolean; summary: string }>;
+  duration_ms?: number;
+  error?: string;
+  traceback?: string;
+  proposal_id?: string;
+  security_findings?: any[];
+};
+
+export async function runMultiAgent(request: MultiAgentRequest): Promise<MultiAgentResult> {
+  return j(
+    await fetch("/pipeline/multi-agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    })
+  );
+}
+
+export async function getMultiAgentStatus(runId: string): Promise<any> {
+  return j(await fetch("/pipeline/multi-agent/status/" + runId));
+}
+
+export async function applyMultiAgentResult(runId: string): Promise<any> {
+  return j(
+    await fetch("/pipeline/multi-agent/apply/" + runId, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    })
+  );
+}

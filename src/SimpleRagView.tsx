@@ -37,20 +37,27 @@ export function SimpleRagView(props: {
   const [projectSearch, setProjectSearch] = useState("");
 
   useEffect(() => {
-    // Filter documents based on search query
+    // Filter by active project first, then by search query
+    let docs = documents;
+    if (props.activeProject) {
+      const projName = props.activeProject.name.toLowerCase();
+      docs = documents.filter(doc => {
+        const docProject = doc.metadata?.project_name
+          || (doc.source?.includes("/") ? doc.source.split("/")[0] : null)
+          || "";
+        return docProject.toLowerCase() === projName;
+      });
+    }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      const filtered = documents.filter(doc =>
+      docs = docs.filter(doc =>
         doc.source.toLowerCase().includes(query) ||
         doc.content.toLowerCase().includes(query) ||
-        doc.metadata?.project_name?.toLowerCase().includes(query) ||
         doc.metadata?.filename?.toLowerCase().includes(query)
       );
-      setFilteredDocs(filtered);
-    } else {
-      setFilteredDocs(documents);
     }
-  }, [searchQuery, documents]);
+    setFilteredDocs(docs);
+  }, [searchQuery, documents, props.activeProject]);
   useEffect(() => { loadDocuments(); }, []);
 
   async function loadDocuments() {
@@ -58,8 +65,8 @@ export function SimpleRagView(props: {
     try {
       const rawDocs = await listAllDocuments();
       // Deduplicate and clean: hide __DELETED__, junk, and migrated flat docs
-      const sourceSet = new Set<string>(rawDocs.map(d => d.source));
-      const docs = rawDocs.filter(doc => {
+      const sourceSet = new Set<string>(rawDocs.map((d: any) => d.source));
+      const docs = rawDocs.filter((doc: any) => {
         const src = doc.source || "";
         // Hide docs marked as deleted
         if (src.startsWith("__DELETED__/")) return false;
@@ -465,23 +472,19 @@ export function SimpleRagView(props: {
                             }}
                             style={{
                               padding: "6px 10px",
-                              backgroundColor: "#111",
-                              borderRadius: "3px",
                               cursor: "pointer",
                               display: "flex",
                               justifyContent: "space-between",
                               alignItems: "center",
-                              borderLeft: "3px solid #ff9e4a",
+                              borderBottom: "1px solid #1a2a1a",
                               userSelect: "none"
                             }}
                           >
-                            <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                              <span style={{color: "#888", fontSize: "11px"}}>{isCollapsed ? "+" : "-"}</span>
-                              <span style={{color: "#ff9e4a", fontSize: "13px", fontWeight: "bold"}}>{projectName}</span>
-                              <span style={{color: "#666", fontSize: "11px"}}>({items.length} doc{items.length !== 1 ? "s" : ""})</span>
-                            </div>
+                            <span style={{color: "#6fa58f", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.1em"}}>
+                              {isCollapsed ? "+" : "-"} {projectName} ({items.length})
+                            </span>
                             {selectedCount > 0 && (
-                              <span style={{color: "#4aff4a", fontSize: "11px"}}>{selectedCount} selected</span>
+                              <span style={{color: "#4aff4a", fontSize: "10px"}}>{selectedCount} sel</span>
                             )}
                           </div>
                           {!isCollapsed && (
@@ -491,32 +494,23 @@ export function SimpleRagView(props: {
                                   key={idx}
                                   onClick={() => toggleDocSelection(idx)}
                                   style={{
-                                    padding: "8px 10px",
-                                    backgroundColor: selectedDocs.has(idx) ? "#1a3a1a" : "#0a0a0a",
-                                    borderRadius: "3px",
-                                    borderLeft: selectedDocs.has(idx) ? "3px solid #4aff4a" : "3px solid #4a9eff",
+                                    padding: "5px 10px",
+                                    backgroundColor: selectedDocs.has(idx) ? "#0d1f0d" : "transparent",
+                                    borderRadius: "2px",
+                                    borderLeft: selectedDocs.has(idx) ? "2px solid #4aff4a" : "2px solid transparent",
                                     cursor: "pointer",
-                                    transition: "all 0.2s"
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    fontSize: "12px"
                                   }}
                                 >
-                                  <div style={{display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "2px"}}>
-                                    <div style={{color: "#4a9eff", fontSize: "12px", fontWeight: "bold"}}>
-                                      {doc.metadata?.filename || doc.source?.split("/").pop() || doc.source || "unknown"}
-                                    </div>
-                                    {selectedDocs.has(idx) && (
-                                      <div style={{color: "#4aff4a", fontSize: "11px"}}>In Chat</div>
-                                    )}
-                                  </div>
-                                  <div style={{
-                                    color: "#ccc",
-                                    fontSize: "11px",
-                                    whiteSpace: "pre-wrap",
-                                    maxHeight: "40px",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis"
-                                  }}>
-                                    {doc.content?.substring(0, 150)}{doc.content?.length > 150 ? "..." : ""}
-                                  </div>
+                                  <span style={{color: selectedDocs.has(idx) ? "#4aff4a" : "#c7ffe4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                                    {doc.metadata?.filename || doc.source?.split("/").pop() || doc.source || "unknown"}
+                                  </span>
+                                  {selectedDocs.has(idx) && (
+                                    <span style={{color: "#4aff4a", fontSize: "10px", flexShrink: 0, marginLeft: "8px"}}>selected</span>
+                                  )}
                                 </div>
                               ))}
                             </div>
