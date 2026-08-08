@@ -133,6 +133,88 @@ function Divider() {
 // ----------------------------------------------------------------------------
 // VIEWS
 // ----------------------------------------------------------------------------
+function ProductOverviewHero() {
+  return (
+    <header className="overview-hero">
+      <h1>Reactor AI — Self-Hosted AI Coding Pipeline That Runs Local LLMs</h1>
+      <p>
+        Reactor AI is a self-hosted AI coding pipeline. It runs open models locally through Ollama on
+        hardware you control, so your source code and your prompts never leave your own infrastructure.
+        It is built as an alternative to cloud coding assistants for people who cannot, or would rather
+        not, ship their repositories to somebody else&apos;s servers.
+      </p>
+    </header>
+  );
+}
+function ProductOverview() {
+  return (
+    <section className="overview-content" aria-label="About Reactor AI">
+      <div className="overview-grid">
+        <div>
+          <h2>What Reactor AI is</h2>
+          <p>
+            Reactor AI is a control plane for AI-assisted development that you host yourself. Instead of
+            calling a vendor API, it drives open models served locally by Ollama and connects them to the
+            parts of the job that matter: your repositories, your documents, and your pipeline runs. The
+            dashboard above is the same interface you get when you run it — model status, retrieval over
+            your own documents, repo operations, and task history in one place.
+          </p>
+          <h2>Who it is for</h2>
+          <p>
+            It is for developers and teams whose code cannot go to a third party: client work under NDA,
+            regulated work, internal tooling, security research, and anyone who simply wants to keep source
+            code private from AI vendors. It also suits people who want a local LLM for coding without
+            giving up structure — a repeatable pipeline rather than an ad-hoc chat window. If you went
+            looking for a self-hosted alternative to GitHub Copilot and only found autocomplete plugins,
+            this is the other half of that problem.
+          </p>
+        </div>
+        <div>
+          <h2>How your data and privacy work</h2>
+          <p>
+            Models run locally through Ollama. Prompts, file contents, and retrieved documents are processed
+            on machines you own, with no vendor round-trip in the path. Because you host it, the network
+            boundary is yours to draw: you decide what the pipeline is allowed to reach, and you can run the
+            whole thing on an isolated network. Privacy here is a property of where the software runs, not a
+            policy promise from somebody else.
+          </p>
+          <h2>Human approval before damaging changes</h2>
+          <p>
+            Reactor AI integrates DEFCON ONE, a human-in-the-loop approval layer. Damaging changes are gated
+            on a person saying yes before they land. A pipeline that can edit repositories and run operations
+            needs a stop button that is not the model&apos;s own judgement, and that is what DEFCON ONE is
+            there to provide.
+          </p>
+        </div>
+      </div>
+      <Divider />
+      <h2>Frequently asked questions</h2>
+      <dl className="overview-faq">
+        <dt>Is Reactor AI a self-hosted alternative to GitHub Copilot?</dt>
+        <dd>
+          That is what it is built for. The difference is where the model runs. Cloud coding assistants send
+          your context to a vendor; Reactor AI runs open models locally through Ollama, on infrastructure you
+          own and operate.
+        </dd>
+        <dt>Which models does it use?</dt>
+        <dd>
+          Open models served by Ollama. You choose which ones to pull and configure, and Reactor AI
+          orchestrates them rather than tying you to one provider.
+        </dd>
+        <dt>Does my source code leave my network?</dt>
+        <dd>
+          No. Inference happens locally through Ollama, so code and prompts stay inside your own
+          infrastructure instead of being sent to a hosted assistant.
+        </dd>
+        <dt>What is DEFCON ONE?</dt>
+        <dd>
+          It is the approval layer Reactor AI integrates so a human signs off before a damaging change lands.
+          The pipeline proposes, a person approves, and only then does the change go through.
+        </dd>
+      </dl>
+    </section>
+  );
+}
 function DashboardView(props: {
   health: Health | null;
   modelsStatus: ModelsStatus | null;
@@ -142,7 +224,9 @@ function DashboardView(props: {
   onRefreshTasks: () => void;
 }) {
   return (
-    <div className="main-panels">
+    <>
+      <ProductOverviewHero />
+      <div className="main-panels">
       <Panel
         title="System Status"
         right={
@@ -227,7 +311,9 @@ function DashboardView(props: {
           <div className="muted">No tasks returned (endpoint may be unavailable).</div>
         )}
       </Panel>
-    </div>
+      </div>
+      <ProductOverview />
+    </>
   );
 }
 function RagView(props: {

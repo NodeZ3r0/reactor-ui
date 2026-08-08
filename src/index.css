@@ -1262,3 +1262,83 @@ optgroup { background: #12171a; color: #6a9a7a; font-weight: 600; }
 @media (max-width: 768px) {
   .multi-agent-panel { width: 100%; min-width: unset; position: absolute; right: 0; top: 0; bottom: 0; z-index: 20; }
 }
+
+
+/* ---- Product overview copy: visible to users, crawlable by search engines ---- */
+.overview-hero {
+  border: 1px solid #123327;
+  border-radius: 8px;
+  background: radial-gradient(circle at top, #031413 0, #000407 80%);
+  padding: 12px 14px;
+}
+
+.overview-hero h1 {
+  margin: 0 0 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #7bffbd;
+}
+
+.overview-hero p {
+  margin: 0;
+  max-width: 95ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #9cd4b7;
+}
+
+.overview-content {
+  border: 1px solid #123327;
+  border-radius: 8px;
+  background: radial-gradient(circle at top, #031413 0, #000407 80%);
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+
+.overview-content h2 {
+  margin: 0 0 6px;
+  font-family: "IBM Plex Mono", monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6fa58f;
+}
+
+.overview-content p {
+  margin: 0 0 14px;
+  max-width: 95ch;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #b6dcc8;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 0 24px;
+}
+
+.overview-faq {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 0 24px;
+}
+
+.overview-faq dt {
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c7ffe4;
+}
+
+.overview-faq dd {
+  margin: 0 0 14px;
+  max-width: 95ch;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #b6dcc8;
+}
