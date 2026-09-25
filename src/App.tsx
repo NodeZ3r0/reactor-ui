@@ -622,7 +622,7 @@ function PipelineView(props: {
       const newHistory = [...chatHistory, userMsg];
       setChatHistory(newHistory);
       const messages = [{ role: "system", content: "You are Joshua, the Reactor AI. You are warm, knowledgeable, and direct. You have full access to RAG docs, repos, and server tools. Give clear, actionable answers. Use code blocks. Be helpful like a brilliant friend, not a cold robot." }, ...newHistory.slice(-20)];
-      const res = await fetch("/api/ollama/chat-with-tools", { method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": "N2WCVzIwD3L-btj3nId2OXZPn8pQNsd02S2EY3nidVE" }, body: JSON.stringify({ model: selectedModel, messages, enable_tools: true }) });
+      const res = await fetch("/api/ollama/chat-with-tools", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: selectedModel, messages, enable_tools: true }) });
       const text = await res.text();
       const lines = text.trim().split("\n").filter(l => l.trim());
       let finalContent = "";
@@ -1128,7 +1128,7 @@ export default function App() {
             <div className="top-bar-subtitle">Multi-model pipeline · RAG · Repo operations</div>
           </div>
           <div className="top-bar-right">
-            <div className="env-pill">env: NODEZ3R0 / Rig</div>
+            <div className="env-pill">env: {import.meta.env.VITE_REACTOR_ENV_LABEL || "NODEZ3R0 / Rig"}</div>
             <div className="health-chip">
               <span className={"health-dot " + pillClass(ollamaOk && dbOk ? true : ollamaOk === null ? null : false)} />
               <span>

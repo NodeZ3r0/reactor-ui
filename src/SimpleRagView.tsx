@@ -260,7 +260,7 @@ export function SimpleRagView(props: {
               <span>RAG</span>
               <span style={{color: "#555"}}>{">"}</span>
               {props.activeProject ? (
-                <span style={{color: "#4aff4a", fontWeight: "bold"}}>{props.activeProject.name}</span>
+                <span style={{color: "#4ade9b", fontWeight: "bold"}}>{props.activeProject.name}</span>
               ) : (
                 <span style={{color: "#ff9e4a"}}>No project selected</span>
               )}
@@ -276,7 +276,7 @@ export function SimpleRagView(props: {
                   flex: 1,
                   padding: "10px 14px",
                   backgroundColor: props.activeProject ? "#0a1a0a" : "#020b0d",
-                  color: props.activeProject ? "#4aff4a" : "#888",
+                  color: props.activeProject ? "#4ade9b" : "#888",
                   border: props.activeProject ? "1px solid #4aff4a44" : "1px solid #444",
                   borderRadius: "4px",
                   textAlign: "left",
@@ -303,7 +303,7 @@ export function SimpleRagView(props: {
                 backgroundColor: "#0a1a0a",
                 border: "1px solid #4aff4a33",
                 borderRadius: "4px",
-                color: "#4aff4a",
+                color: "#4ade9b",
                 fontSize: "12px",
                 display: "flex",
                 alignItems: "center",
@@ -394,7 +394,7 @@ export function SimpleRagView(props: {
                 padding: "10px",
                 borderRadius: "5px",
                 backgroundColor: uploadStatus.startsWith("✓") ? "#1a3a1a" : uploadStatus.startsWith("✗") ? "#3a1a1a" : "#1a1a3a",
-                color: uploadStatus.startsWith("✓") ? "#4aff4a" : uploadStatus.startsWith("✗") ? "#ff4a4a" : "#fff"
+                color: uploadStatus.startsWith("✓") ? "#4ade9b" : uploadStatus.startsWith("✗") ? "#ff4a4a" : "#fff"
               }}>
                 {uploadStatus}
               </div>
@@ -422,7 +422,7 @@ export function SimpleRagView(props: {
                   Documents in RAG ({filteredDocs.length})
                 </div>
                 {selectedDocs.size > 0 && (
-                  <div style={{color: "#4aff4a", fontSize: "13px"}}>
+                  <div style={{color: "#4ade9b", fontSize: "13px"}}>
                     {selectedDocs.size} selected for chat
                   </div>
                 )}
@@ -484,7 +484,7 @@ export function SimpleRagView(props: {
                               {isCollapsed ? "+" : "-"} {projectName} ({items.length})
                             </span>
                             {selectedCount > 0 && (
-                              <span style={{color: "#4aff4a", fontSize: "10px"}}>{selectedCount} sel</span>
+                              <span style={{color: "#4ade9b", fontSize: "10px"}}>{selectedCount} sel</span>
                             )}
                           </div>
                           {!isCollapsed && (
@@ -497,7 +497,7 @@ export function SimpleRagView(props: {
                                     padding: "5px 10px",
                                     backgroundColor: selectedDocs.has(idx) ? "#0d1f0d" : "transparent",
                                     borderRadius: "2px",
-                                    borderLeft: selectedDocs.has(idx) ? "2px solid #4aff4a" : "2px solid transparent",
+                                    borderLeft: selectedDocs.has(idx) ? "2px solid #4ade9b" : "2px solid transparent",
                                     cursor: "pointer",
                                     display: "flex",
                                     justifyContent: "space-between",
@@ -505,11 +505,11 @@ export function SimpleRagView(props: {
                                     fontSize: "12px"
                                   }}
                                 >
-                                  <span style={{color: selectedDocs.has(idx) ? "#4aff4a" : "#c7ffe4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
+                                  <span style={{color: selectedDocs.has(idx) ? "#4ade9b" : "#c7ffe4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"}}>
                                     {doc.metadata?.filename || doc.source?.split("/").pop() || doc.source || "unknown"}
                                   </span>
                                   {selectedDocs.has(idx) && (
-                                    <span style={{color: "#4aff4a", fontSize: "10px", flexShrink: 0, marginLeft: "8px"}}>selected</span>
+                                    <span style={{color: "#4ade9b", fontSize: "10px", flexShrink: 0, marginLeft: "8px"}}>selected</span>
                                   )}
                                 </div>
                               ))}
@@ -620,7 +620,7 @@ export function SimpleRagView(props: {
                       style={{
                         padding: indent ? "6px 12px 6px 28px" : "6px 12px",
                         backgroundColor: props.activeProject?.id === project.id ? "#1a3a1a" : "transparent",
-                        borderLeft: props.activeProject?.id === project.id ? "3px solid #4aff4a" : "3px solid transparent",
+                        borderLeft: props.activeProject?.id === project.id ? "3px solid #4ade9b" : "3px solid transparent",
                         borderBottom: "1px solid #111",
                         cursor: "pointer",
                         transition: "all 0.15s",

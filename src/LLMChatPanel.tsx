@@ -240,7 +240,7 @@ export function LLMChatPanel(props: {
   }
 
   function renderToolLog(entry: ToolLogEntry) {
-    const statusColor = entry.status === "success" ? "#4ade80" : entry.status === "pending_approval" ? "#facc15" : "#f87171";
+    const statusColor = entry.status === "success" ? "#4ade9b" : entry.status === "pending_approval" ? "#facc15" : "#f87171";
     return (
       <div style={{ fontSize: "12px", padding: "4px 8px", background: "#0a0a0a", borderRadius: "4px", borderLeft: `3px solid ${statusColor}`, marginBottom: "4px" }}>
         <span style={{ color: statusColor, fontWeight: "bold" }}>{entry.tool}</span>

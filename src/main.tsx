@@ -36,7 +36,7 @@ class ErrorBoundary extends React.Component<
             justifyContent: "center",
             minHeight: "100vh",
             background: "#0a0e0a",
-            color: "#00ff00",
+            color: "#4ade9b",
             fontFamily: "monospace",
             padding: 20,
           }}
@@ -49,7 +49,7 @@ class ErrorBoundary extends React.Component<
             <button
               onClick={() => window.location.reload()}
               style={{
-                background: "linear-gradient(135deg, #00ff00, #00cc00)",
+                background: "linear-gradient(135deg, #4ade9b, #4ade9b)",
                 border: "none",
                 color: "#000",
                 padding: "10px 20px",

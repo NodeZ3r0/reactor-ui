@@ -1,0 +1,33 @@
+# Reactor AI public demo (reactorai.app). Never talks to the live Reactor:
+# ui  = the Reactor UI built with the DEMO label, static files only
+# api = demo_api.py, sample data + Joshua's set answers, no LLM, no keys
+name: reactor-demo
+services:
+  ui:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        - VITE_REACTOR_ENV_LABEL=DEMO · sample data
+    image: reactor-demo-ui:latest
+    container_name: reactor_demo_ui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5175:80"
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: reactor-demo-api:latest
+    container_name: reactor_demo_api
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "127.0.0.1:5176:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
