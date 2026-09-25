@@ -1412,7 +1412,7 @@ optgroup { background: #12171a; color: #6a9a7a; font-weight: 600; }
 .logo {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;   /* WOPR-037: center the logo in the sidebar */
 }
 .logo-img {
   display: block;
