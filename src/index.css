@@ -1452,3 +1452,29 @@ optgroup { background: #12171a; color: #6a9a7a; font-weight: 600; }
   object-fit: contain;
 }
 /* end WOPR-036 -------------------------------------------------------------- */
+
+
+/* WOPR-039: per-view FAQ at the bottom. .main-shell scrolls so a FAQ placed
+   below a full-height view (the IDE, the RAG panels) can be reached. */
+.main-shell { overflow-y: auto; }
+.view-faq {
+  border-top: 1px solid #14492f;
+  margin-top: 12px;
+  padding: 18px 4px 24px;
+}
+.view-faq-title {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4ade9b;
+  margin: 0 0 12px;
+}
+
+/* WOPR-039 mobile: keep the per-view FAQ tidy on phones. */
+@media (max-width: 768px) {
+  .view-faq { padding: 16px 2px 28px; margin-top: 8px; }
+  .view-faq-title { font-size: 12px; }
+  .overview-faq { max-width: 100%; }
+  .faq-item > summary { padding: 11px 36px 11px 12px; font-size: 12.5px; }
+  .faq-answer { padding: 10px 12px; font-size: 12px; }
+}

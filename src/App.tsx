@@ -911,6 +911,22 @@ function PipelineView(props: {
   );
 }
 
+function FaqSection({ title, items }: { title: string; items: { q: string; a: string }[] }) {
+  return (
+    <section className="view-faq">
+      <h2 className="view-faq-title">{title}</h2>
+      <div className="overview-faq">
+        {items.map((it, i) => (
+          <details className="faq-item" key={it.q} open={i === 0}>
+            <summary>{it.q}</summary>
+            <div className="faq-answer">{it.a}</div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function App() {
   const [activeView, setActiveView] = useState<View>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1162,6 +1178,17 @@ export default function App() {
             updateProject={updateProject}
           />
         )}
+        {activeView === "pipeline" && (
+          <FaqSection
+            title="About this page - Pipeline & Editor"
+            items={[
+              { q: "What is the Pipeline & Editor page?", a: "It is Reactor's coding workspace: a repo browser on the left, a code editor in the middle, and Joshua (the AI) in the terminal below. You pick a repo and branch, open a file, and work on it with the model." },
+              { q: "How do I open and edit a file?", a: "Choose a repo in the left sidebar, pick a branch, then click a file in the tree. It opens in the editor. Edit it, then use Save to write it back to the repo. In this public demo the files are sample data and saving is disabled." },
+              { q: "How do I use Joshua and the Agents?", a: "Type in the terminal box to ask Joshua about the open file or the repo. Turn on Agents to send one task to several specialist agents (planning, code, review, security) that propose one merged change. In the demo Joshua answers a few set questions, then points you to the contact page." },
+              { q: "What does the RAG toggle do here?", a: "With RAG on, Joshua pulls relevant chunks from your indexed documents into its answer, so it works from your own docs. You manage those documents on the RAG / Docs page." },
+            ]}
+          />
+        )}
         {activeView === "rag" && (
           <SimpleRagView
             activeProject={activeProject}
@@ -1169,6 +1196,17 @@ export default function App() {
             setActiveProjectId={setActiveProjectId}
             onNewProject={() => setActiveView("pipeline")}
             upsertProject={upsertProject}
+          />
+        )}
+        {activeView === "rag" && (
+          <FaqSection
+            title="About this page - RAG / Docs"
+            items={[
+              { q: "What is the RAG / Docs page?", a: "It is where you build Reactor's document library. RAG (retrieval-augmented generation) means the model answers using your own documents, not just its training. You upload docs here; Reactor indexes them and retrieves the relevant parts when you ask a question." },
+              { q: "How do I add documents?", a: "Pick or create a project at the top, then upload files or a whole folder into that project. Reactor splits each document into chunks and stores them so they can be searched. In this public demo uploading is turned off and the list shows sample documents." },
+              { q: "How are my documents used in answers?", a: "When RAG is enabled in a chat, Reactor searches your indexed documents for the parts most relevant to your question and gives them to the model as context. That keeps answers grounded in your own material." },
+              { q: "Do my documents leave my network?", a: "No. Indexing and retrieval run locally on infrastructure you control, and inference runs through Ollama on the same machines, so your documents and prompts are not sent to an outside vendor." },
+            ]}
           />
         )}
       </main>
