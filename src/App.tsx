@@ -534,7 +534,10 @@ function PipelineView(props: {
 
   useEffect(() => {
     fetch("/api/forgejo/repos").then(r => r.json()).then(data => {
-      setRepos(data.repos || []);
+      const _list = data.repos || [];
+      setRepos(_list);
+      // WOPR-040: expand every category by default so demo repos show on load.
+      setExpandedCategories(new Set(_list.map((r: any) => r.category || "Other")));
     }).catch(e => setOutput(prev => prev + "[ERROR] " + e + "\n"));
     fetch("/api/ollama/models").then(r => r.json()).then(data => {
       const names = (data.models?.map((m: any) => m.name) || []);
