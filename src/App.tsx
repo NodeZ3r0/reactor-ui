@@ -1049,7 +1049,11 @@ export default function App() {
       {sidebarOpen && <div className="sidebar-overlay" onMouseDown={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="logo">
-          <span>WOPR</span> / REACTOR
+          <img
+            src="https://wopr.systems/wopr-logo.png?v=20260925green"
+            alt="WOPR"
+            className="logo-img"
+          />
         </div>
         <div>
           <div className="sidebar-section-title">Views</div>
