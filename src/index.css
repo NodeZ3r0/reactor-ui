@@ -1342,3 +1342,102 @@ optgroup { background: #12171a; color: #6a9a7a; font-weight: 600; }
   line-height: 1.65;
   color: #b6dcc8;
 }
+
+
+/* WOPR-035 mobile header fix ------------------------------------------------
+   .hamburger had no base rule and stretched to full document height as a flex
+   child of .app-root. Give it a real fixed-size box, hidden on desktop, shown
+   as a fixed button on mobile. Also tidy the mobile top bar. Additive: this
+   block comes last so it wins by source order. */
+.hamburger {
+  display: none;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: #4ade9b;
+  background: #041014;
+  border: 1px solid #14492f;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.hamburger:hover { background: rgba(74, 222, 155, 0.08); }
+
+/* The visible bar title is the brand mark on this page: paint it WOPR green. */
+.top-bar-title > div:first-child { color: #4ade9b; }
+
+@media (max-width: 768px) {
+  .hamburger {
+    display: inline-flex !important;
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 60;
+    width: 40px;
+    height: 40px;
+  }
+  /* Leave room for the fixed hamburger; stack title over the status pills. */
+  .top-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding-left: 52px;
+    min-height: 40px;
+  }
+  .top-bar-right {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .env-pill,
+  .health-chip {
+    font-size: 10px;
+    padding: 3px 8px;
+    max-width: 100%;
+  }
+  .health-chip { white-space: normal; }
+}
+/* end WOPR-035 -------------------------------------------------------------- */
+
+
+/* WOPR-035: mobile header fix */
+@media (max-width: 768px) {
+  /* The fixed sidebar must not create a layout column that squishes the header. */
+  .app-root { display: block; min-height: 100vh; }
+  .main-shell { display: flex; flex-direction: column; min-height: 100vh; padding: 0; }
+
+  /* Hamburger: a real square button pinned in the top bar, not a full-height strip. */
+  .hamburger {
+    position: static !important;
+    width: 40px; height: 40px; min-width: 40px;
+    padding: 0; margin: 0;
+    border: 1px solid #1f6b4a; border-radius: 6px;
+    background: #0b1310; color: #4ade9b;
+    font-size: 20px; line-height: 1;
+    align-self: center;
+    order: -1;                 /* sits before the title inside .top-bar */
+  }
+
+  /* Header row: hamburger + title on the left, status on the right, tidy and wrapping. */
+  .top-bar {
+    position: sticky; top: 0; z-index: 30;
+    gap: 10px; padding: 8px 10px;
+    background: #020b10; border-bottom: 1px solid #0f2c2c;
+    flex-wrap: wrap;
+  }
+  .top-bar-left { flex-direction: row; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+  .top-bar-title { font-size: 14px; }
+  .top-bar-title > div:first-child { color: #4ade9b; }   /* "ReactorAI(TM)" in the bar, brand green */
+  .top-bar-subtitle { display: none; }                    /* too long for a phone bar */
+  .top-bar-right { flex: 0 0 auto; gap: 6px; }
+  .env-pill, .health-chip { font-size: 10px; }
+
+  /* Logo shows in the drawer (its natural place); recolour it to brand green there. */
+  .sidebar .logo { color: #4ade9b; }
+  .sidebar .logo span { color: #7df5be; }
+}
