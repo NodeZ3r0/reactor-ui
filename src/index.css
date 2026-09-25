@@ -1323,21 +1323,50 @@ optgroup { background: #12171a; color: #6a9a7a; font-weight: 600; }
 
 .overview-faq {
   margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 760px;
 }
 
-.overview-faq dt {
-  margin-bottom: 4px;
-  font-size: 12.5px;
+/* Native <details> accordions. No JS. */
+.faq-item {
+  border: 1px solid #14492f;
+  border-radius: 8px;
+  background: #041014;
+  overflow: hidden;
+}
+
+.faq-item > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 40px 12px 14px;
+  position: relative;
+  font-size: 13px;
   font-weight: 600;
   color: #c7ffe4;
+  user-select: none;
 }
 
-.overview-faq dd {
-  margin: 0 0 14px;
-  max-width: 95ch;
+.faq-item > summary::-webkit-details-marker { display: none; }
+
+.faq-item > summary::after {
+  content: "+";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #4ade9b;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.faq-item[open] > summary::after { content: "\2212"; }   /* minus */
+.faq-item > summary:hover { color: #7df5be; }
+.faq-item[open] > summary { border-bottom: 1px solid #14492f; }
+
+.faq-answer {
+  padding: 12px 14px;
   font-size: 12.5px;
   line-height: 1.65;
   color: #b6dcc8;

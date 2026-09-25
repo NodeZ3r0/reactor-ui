@@ -189,29 +189,24 @@ function ProductOverview() {
       </div>
       <Divider />
       <h2>Frequently asked questions</h2>
-      <dl className="overview-faq">
-        <dt>Is Reactor AI a self-hosted alternative to GitHub Copilot?</dt>
-        <dd>
-          That is what it is built for. The difference is where the model runs. Cloud coding assistants send
-          your context to a vendor; Reactor AI runs open models locally through Ollama, on infrastructure you
-          own and operate.
-        </dd>
-        <dt>Which models does it use?</dt>
-        <dd>
-          Open models served by Ollama. You choose which ones to pull and configure, and Reactor AI
-          orchestrates them rather than tying you to one provider.
-        </dd>
-        <dt>Does my source code leave my network?</dt>
-        <dd>
-          No. Inference happens locally through Ollama, so code and prompts stay inside your own
-          infrastructure instead of being sent to a hosted assistant.
-        </dd>
-        <dt>What is DEFCON ONE?</dt>
-        <dd>
-          It is the approval layer Reactor AI integrates so a human signs off before a damaging change lands.
-          The pipeline proposes, a person approves, and only then does the change go through.
-        </dd>
-      </dl>
+      <div className="overview-faq">
+        <details className="faq-item" open>
+          <summary>Is Reactor AI a self-hosted alternative to GitHub Copilot?</summary>
+          <div className="faq-answer">That is what it is built for. The difference is where the model runs. Cloud coding assistants send your context to a vendor; Reactor AI runs open models locally through Ollama, on infrastructure you own and operate.</div>
+        </details>
+        <details className="faq-item">
+          <summary>Which models does it use?</summary>
+          <div className="faq-answer">Open models served by Ollama. You choose which ones to pull and configure, and Reactor AI orchestrates them rather than tying you to one provider.</div>
+        </details>
+        <details className="faq-item">
+          <summary>Does my source code leave my network?</summary>
+          <div className="faq-answer">No. Inference happens locally through Ollama, so code and prompts stay inside your own infrastructure instead of being sent to a hosted assistant.</div>
+        </details>
+        <details className="faq-item">
+          <summary>What is DEFCON ONE?</summary>
+          <div className="faq-answer">It is the approval layer Reactor AI integrates so a human signs off before a damaging change lands. The pipeline proposes, a person approves, and only then does the change go through.</div>
+        </details>
+      </div>
     </section>
   );
 }
